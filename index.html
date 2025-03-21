@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TypeCraft - Practice Touch Typing With Your Documents</title>
+    <!-- PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         :root {
             --primary: #6366f1;
@@ -356,13 +358,21 @@
                     initializeTypingTest();
                 };
                 
-                if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.type === 'text/html' || file.name.endsWith('.html')) {
                     reader.readAsText(file);
+                } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                    // Handle PDF files properly
+                    processPdfFile(file);
+                    return; // Skip the normal reader flow
+                } else if (file.type.includes('word') || file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+                    // For DOCX files, we'd need additional processing
+                    // For now, just try to read as text and warn
+                    reader.readAsText(file);
+                    alert('Note: Word documents (.docx/.doc) may not display properly. Plain text (.txt) files work best.');
                 } else {
-                    // For simplicity, we're just reading all files as text
-                    // In a real implementation, you'd need proper parsers for PDF, DOCX, etc.
+                    // Fallback for other file types
                     reader.readAsText(file);
-                    alert('Note: For non-TXT files, formatting might not be preserved correctly.');
+                    alert('This file type may not be supported. For best results, use .txt files.');
                 }
             }
             
@@ -504,6 +514,46 @@
                 typingArea.style.display = 'none';
                 fileInput.value = '';
             });
+            
+            // Function to process PDF files using PDF.js
+            async function processPdfFile(file) {
+                try {
+                    // Set up PDF.js
+                    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+                    
+                    // Create a URL for the PDF
+                    const fileURL = URL.createObjectURL(file);
+                    
+                    // Show loading indicator
+                    textDisplay.innerHTML = '<p>Processing PDF, please wait...</p>';
+                    typingArea.style.display = 'block';
+                    
+                    // Load the PDF document
+                    const loadingTask = pdfjsLib.getDocument(fileURL);
+                    const pdf = await loadingTask.promise;
+                    
+                    // Extract text from all pages
+                    let extractedText = '';
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        extractedText += pageText + '\n\n';
+                    }
+                    
+                    // Clean up the extracted text
+                    documentText = extractedText.trim();
+                    
+                    // Initialize the typing test
+                    initializeTypingTest();
+                    
+                } catch (error) {
+                    console.error('Error processing PDF:', error);
+                    alert('There was an error processing the PDF. Try a simpler PDF or a text file instead.');
+                    typingArea.style.display = 'none';
+                }
+            }
         });
     </script>
 </body>
