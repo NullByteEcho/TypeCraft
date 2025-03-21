@@ -295,11 +295,14 @@
         .text-char {
             display: inline-block;
             position: relative;
+            letter-spacing: normal;
+            padding: 0 1px;
         }
         
         .text-char.current {
             background-color: rgba(99, 102, 241, 0.3);
             border-radius: 2px;
+            padding: 0 1px;
         }
         
         .text-char.correct {
@@ -336,6 +339,17 @@
             font-size: 16px;
             line-height: 1.6;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Improved text styles for better readability */
+        .document-text p {
+            font-size: 18px;
+            line-height: 1.8;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #1e293b;
+            letter-spacing: 0.01em;
         }
         
         /* Completion modal */
@@ -876,12 +890,28 @@
                     paragraphs.forEach(paragraph => {
                         if (!paragraph.trim()) return;
                         
+                        // Fix spacing issues by adding spaces between words if needed
+                        // Look for patterns like "#CHAPTER2An" or "cellstosimulatnaturalregeneration"
+                        const processedText = paragraph
+                            // Add space after punctuation if followed by a capital letter
+                            .replace(/([.,!?;:])([A-Z])/g, '$1 $2')
+                            // Add space between lowercase and uppercase (camelCase detection)
+                            .replace(/([a-z])([A-Z])/g, '$1 $2')
+                            // Fix hashtags with missing spaces
+                            .replace(/(#)([A-Z])/g, '$1 $2')
+                            // Fix section headers 
+                            .replace(/(##?)([A-Za-z])/g, '$1 $2')
+                            // Add space after # if needed
+                            .replace(/#([A-Za-z])/g, '# $1');
+                        
                         // Create paragraph element
                         const para = document.createElement('p');
                         para.style.marginBottom = '16px';
+                        para.style.lineHeight = '1.8';
+                        para.style.whiteSpace = 'pre-wrap'; // Preserve whitespace
                         
-                        // Set text content
-                        para.textContent = paragraph;
+                        // Set text content with improved spacing
+                        para.textContent = processedText;
                         
                         // Add to document
                         docContainer.appendChild(para);
@@ -891,7 +921,6 @@
                     documentViewport.innerHTML = '';
                     documentViewport.appendChild(docContainer);
                     
-                    // Extract typeable elements
                     // Extract typeable elements
                     extractTypeableElementsFromDoc(docContainer);
                     
