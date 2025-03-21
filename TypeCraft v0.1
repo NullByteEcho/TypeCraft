@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TypeCraft - Practice Touch Typing With Your Documents</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #a855f7;
+            --light: #f8fafc;
+            --dark: #1e293b;
+            --success: #10b981;
+            --error: #ef4444;
+            --border-radius: 8px;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--light);
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px 0;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        .logo-icon {
+            font-size: 28px;
+            margin-right: 10px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            color: var(--primary-dark);
+        }
+        
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: var(--primary-dark);
+        }
+        
+        p {
+            margin-bottom: 15px;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #cbd5e1;
+            border-radius: var(--border-radius);
+            padding: 40px 20px;
+            margin-bottom: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-section:hover {
+            border-color: var(--primary);
+            background-color: rgba(99, 102, 241, 0.05);
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 10px 0;
+        }
+        
+        .btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .typing-area {
+            display: none;
+            margin-top: 30px;
+        }
+        
+        .text-display {
+            background-color: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            font-size: 18px;
+            line-height: 1.8;
+            margin-bottom: 20px;
+            height: 200px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: var(--primary);
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        
+        .highlighted {
+            background-color: rgba(99, 102, 241, 0.2);
+            border-radius: 3px;
+        }
+        
+        .correct {
+            color: var(--success);
+        }
+        
+        .incorrect {
+            color: var(--error);
+            text-decoration: underline wavy var(--error);
+        }
+        
+        .typing-input {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #cbd5e1;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .typing-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background-color: white;
+            border-radius: var(--border-radius);
+            padding: 15px;
+            flex: 1;
+            margin: 0 10px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-dark);
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        .info-text {
+            color: #64748b;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .stats {
+                flex-direction: column;
+            }
+            
+            .stat-card {
+                margin: 5px 0;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span class="logo-icon">⌨️</span>
+                <h1>TypeCraft</h1>
+            </div>
+            <p>Upload your own documents and practice touch typing while reinforcing reading comprehension</p>
+        </header>
+        
+        <main>
+            <div class="card">
+                <h2>Get Started</h2>
+                <p>Upload a document to start practicing your typing skills. Compatible formats: TXT, PDF, DOCX, and HTML.</p>
+                
+                <div class="upload-section" id="dropArea">
+                    <div class="upload-icon">📄</div>
+                    <p>Drag and drop your document here</p>
+                    <p>or</p>
+                    <button class="btn" id="uploadBtn">Choose a file</button>
+                    <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.html">
+                    <p class="info-text">Your documents are processed locally - nothing is stored on our servers</p>
+                </div>
+            </div>
+            
+            <div class="typing-area" id="typingArea">
+                <div class="stats">
+                    <div class="stat-card">
+                        <p>WPM</p>
+                        <div class="stat-value" id="wpm">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <p>Accuracy</p>
+                        <div class="stat-value" id="accuracy">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <p>Progress</p>
+                        <div class="stat-value" id="progress">0%</div>
+                    </div>
+                </div>
+                
+                <div class="text-display" id="textDisplay"></div>
+                
+                <input type="text" class="typing-input" id="typingInput" placeholder="Start typing...">
+                
+                <div class="controls">
+                    <button class="btn" id="restartBtn">Restart</button>
+                    <button class="btn" id="newDocBtn">Upload New Document</button>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const dropArea = document.getElementById('dropArea');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const fileInput = document.getElementById('fileInput');
+            const typingArea = document.getElementById('typingArea');
+            const textDisplay = document.getElementById('textDisplay');
+            const typingInput = document.getElementById('typingInput');
+            const wpmElement = document.getElementById('wpm');
+            const accuracyElement = document.getElementById('accuracy');
+            const progressElement = document.getElementById('progress');
+            const restartBtn = document.getElementById('restartBtn');
+            const newDocBtn = document.getElementById('newDocBtn');
+            
+            // State variables
+            let documentText = '';
+            let currentPosition = 0;
+            let startTime = null;
+            let errors = 0;
+            let totalTyped = 0;
+            let isTyping = false;
+            
+            // Event listeners for file input
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    processFile(file);
+                }
+            });
+            
+            // Drag and drop functionality
+            dropArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropArea.style.borderColor = '#6366f1'; // Using the primary color value directly
+                dropArea.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+            });
+            
+            dropArea.addEventListener('dragleave', () => {
+                dropArea.style.borderColor = '#cbd5e1';
+                dropArea.style.backgroundColor = 'transparent';
+            });
+            
+            dropArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropArea.style.borderColor = '#cbd5e1';
+                dropArea.style.backgroundColor = 'transparent';
+                
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    processFile(file);
+                }
+            });
+            
+            // Process the uploaded file
+            function processFile(file) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    documentText = e.target.result;
+                    initializeTypingTest();
+                };
+                
+                if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                    reader.readAsText(file);
+                } else {
+                    // For simplicity, we're just reading all files as text
+                    // In a real implementation, you'd need proper parsers for PDF, DOCX, etc.
+                    reader.readAsText(file);
+                    alert('Note: For non-TXT files, formatting might not be preserved correctly.');
+                }
+            }
+            
+            // Initialize the typing test
+            function initializeTypingTest() {
+                // Reset state
+                currentPosition = 0;
+                startTime = null;
+                errors = 0;
+                totalTyped = 0;
+                isTyping = false;
+                
+                // Format text display
+                updateTextDisplay();
+                
+                // Show typing area
+                typingArea.style.display = 'block';
+                
+                // Focus on input
+                typingInput.value = '';
+                typingInput.focus();
+                
+                // Reset stats
+                wpmElement.textContent = '0';
+                accuracyElement.textContent = '0%';
+                progressElement.textContent = '0%';
+            }
+            
+            // Update the text display with current position
+            function updateTextDisplay() {
+                let displayText = '';
+                const words = documentText.split(' ');
+                let charCount = 0;
+                
+                for (let i = 0; i < words.length; i++) {
+                    const word = words[i] + (i < words.length - 1 ? ' ' : '');
+                    
+                    for (let j = 0; j < word.length; j++) {
+                        const char = word[j];
+                        const charPos = charCount + j;
+                        
+                        if (charPos < currentPosition) {
+                            displayText += `<span class="correct">${char}</span>`;
+                        } else if (charPos === currentPosition) {
+                            displayText += `<span class="highlighted">${char}</span><span class="cursor"></span>`;
+                        } else {
+                            displayText += char;
+                        }
+                    }
+                    
+                    charCount += word.length;
+                }
+                
+                textDisplay.innerHTML = displayText;
+                
+                // Auto-scroll to keep the cursor visible
+                const highlightedElement = textDisplay.querySelector('.highlighted');
+                if (highlightedElement) {
+                    highlightedElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            }
+            
+            // Typing input event
+            typingInput.addEventListener('input', (e) => {
+                if (!isTyping) {
+                    startTime = new Date();
+                    isTyping = true;
+                }
+                
+                const typedChar = e.data;
+                
+                if (typedChar === null) {
+                    // Backspace was pressed
+                    return;
+                }
+                
+                totalTyped++;
+                
+                if (currentPosition < documentText.length && typedChar === documentText[currentPosition]) {
+                    // Correct character
+                    currentPosition++;
+                } else {
+                    // Incorrect character
+                    errors++;
+                }
+                
+                // Clear input field
+                typingInput.value = '';
+                
+                // Update display
+                updateTextDisplay();
+                
+                // Update stats
+                updateStats();
+                
+                // Check if done
+                if (currentPosition >= documentText.length) {
+                    finishTypingTest();
+                }
+            });
+            
+            // Update the statistics
+            function updateStats() {
+                if (!startTime) return;
+                
+                const currentTime = new Date();
+                const elapsedTimeInSeconds = (currentTime - startTime) / 1000;
+                const elapsedTimeInMinutes = elapsedTimeInSeconds / 60;
+                
+                // Calculate WPM (assuming average word is 5 characters)
+                const wordsTyped = currentPosition / 5;
+                const wpm = Math.round(wordsTyped / elapsedTimeInMinutes);
+                
+                // Calculate accuracy
+                const accuracy = Math.round(((totalTyped - errors) / totalTyped) * 100);
+                
+                // Calculate progress
+                const progress = Math.round((currentPosition / documentText.length) * 100);
+                
+                // Update UI
+                wpmElement.textContent = wpm;
+                accuracyElement.textContent = `${accuracy}%`;
+                progressElement.textContent = `${progress}%`;
+            }
+            
+            // Finish the typing test
+            function finishTypingTest() {
+                isTyping = false;
+                alert('Congratulations! You completed the typing practice.');
+            }
+            
+            // Restart button
+            restartBtn.addEventListener('click', () => {
+                initializeTypingTest();
+            });
+            
+            // New document button
+            newDocBtn.addEventListener('click', () => {
+                typingArea.style.display = 'none';
+                fileInput.value = '';
+            });
+        });
+    </script>
+</body>
+</html>
