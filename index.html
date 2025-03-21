@@ -969,3 +969,185 @@
                     newCursor.className = 'typing-cursor';
                     charSpans[currentCharIndex].appendChild(newCursor);
                 }
+            }
+            
+            // Typing input event
+            typingInput.addEventListener('input', (e) => {
+                if (!isTyping) {
+                    startTime = new Date();
+                    isTyping = true;
+                }
+                
+                const typedChar = e.data;
+                
+                if (typedChar === null) {
+                    // Backspace was pressed
+                    return;
+                }
+                
+                // Always clear input field for single-character typing
+                typingInput.value = '';
+                
+                // If we've reached the end, ignore
+                if (currentElementIndex >= typeableElements.length) return;
+                
+                // Get the current element and its text
+                const currentElement = typeableElements[currentElementIndex];
+                const text = currentElement.dataset.text;
+                
+                // If we've reached the end of the current element's text
+                if (currentCharIndex >= text.length) {
+                    // Move to the next element
+                    currentElementIndex++;
+                    currentCharIndex = 0;
+                    
+                    // Update stats
+                    updateStats();
+                    
+                    // Highlight the next element
+                    highlightCurrentElement();
+                    return;
+                }
+                
+                totalTyped++;
+                
+                // Get the expected character
+                const expectedChar = text[currentCharIndex];
+                
+                // Get the character span
+                const charSpans = currentElement.querySelectorAll('.text-char');
+                const currentSpan = charSpans[currentCharIndex];
+                
+                if (typedChar === expectedChar) {
+                    // Correct character
+                    currentSpan.classList.add('correct');
+                    currentCharIndex++;
+                } else {
+                    // Incorrect character
+                    currentSpan.classList.add('incorrect');
+                    errors++;
+                    currentCharIndex++;
+                }
+                
+                // Update display
+                highlightCurrentChar();
+                
+                // Update stats
+                updateStats();
+                
+                // Check if we've reached the end of the current element
+                if (currentCharIndex >= text.length) {
+                    // Move to the next element
+                    setTimeout(() => {
+                        currentElementIndex++;
+                        currentCharIndex = 0;
+                        
+                        // Mark the current element as completed
+                        currentElement.classList.remove('current');
+                        currentElement.classList.add('completed');
+                        
+                        // Highlight the next element
+                        highlightCurrentElement();
+                    }, 300); // Small delay for better visual feedback
+                }
+            });
+            
+            // Update the statistics
+            function updateStats() {
+                if (!startTime) return;
+                
+                const currentTime = new Date();
+                const elapsedTimeInSeconds = (currentTime - startTime) / 1000;
+                const elapsedTimeInMinutes = elapsedTimeInSeconds / 60;
+                
+                // Calculate total characters in all typeable elements
+                let totalChars = 0;
+                typeableElements.forEach(element => {
+                    totalChars += element.dataset.text.length;
+                });
+                
+                // Calculate WPM (assuming average word is 5 characters)
+                const charactersTyped = totalTyped;
+                const wordsTyped = charactersTyped / 5;
+                const wpm = Math.round(wordsTyped / elapsedTimeInMinutes) || 0;
+                
+                // Calculate accuracy
+                const accuracy = totalTyped > 0 ? Math.round(((totalTyped - errors) / totalTyped) * 100) : 100;
+                
+                // Calculate progress
+                let completedChars = 0;
+                for (let i = 0; i < currentElementIndex; i++) {
+                    completedChars += typeableElements[i].dataset.text.length;
+                }
+                completedChars += currentCharIndex;
+                
+                const progress = Math.round((completedChars / totalChars) * 100) || 0;
+                
+                // Update UI
+                wpmValue.textContent = wpm;
+                accuracyValue.textContent = `${accuracy}%`;
+                progressValue.textContent = `${progress}%`;
+            }
+            
+            // Show the completion modal
+            function showCompletionModal() {
+                // Calculate final stats
+                const endTime = new Date();
+                const elapsedTimeInSeconds = Math.round((endTime - startTime) / 1000);
+                const minutes = Math.floor(elapsedTimeInSeconds / 60);
+                const seconds = elapsedTimeInSeconds % 60;
+                
+                // Calculate total characters in all typeable elements
+                let totalChars = 0;
+                typeableElements.forEach(element => {
+                    totalChars += element.dataset.text.length;
+                });
+                
+                // Calculate WPM
+                const elapsedTimeInMinutes = elapsedTimeInSeconds / 60;
+                const wordsTyped = totalChars / 5; // Assuming average word is 5 characters
+                const wpm = Math.round(wordsTyped / elapsedTimeInMinutes) || 0;
+                
+                // Calculate accuracy
+                const accuracy = totalTyped > 0 ? Math.round(((totalTyped - errors) / totalTyped) * 100) : 100;
+                
+                // Update the modal
+                finalWpm.textContent = wpm;
+                finalAccuracy.textContent = `${accuracy}%`;
+                finalTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Show the modal
+                completionModal.style.display = 'flex';
+            }
+            
+            // Reset the typing session
+            function resetTypingSession() {
+                // Reset state
+                currentElementIndex = 0;
+                currentCharIndex = 0;
+                startTime = null;
+                errors = 0;
+                totalTyped = 0;
+                isTyping = false;
+                
+                // Reset all elements to their original state
+                typeableElements.forEach(element => {
+                    element.classList.remove('current', 'completed');
+                });
+                
+                // Focus on the input
+                typingInput.value = '';
+                typingInput.focus();
+                
+                // Reset stats
+                wpmValue.textContent = '0';
+                accuracyValue.textContent = '0%';
+                progressValue.textContent = '0%';
+                
+                // Highlight the first element
+                highlightCurrentElement();
+            }
+        });
+    </script>
+</body>
+</html>
