@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TypeCraft - Practice Touch Typing With Your Documents</title>
-    <!-- PDF.js library -->
+    <!-- PDF.js libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
+    <!-- Mammoth.js for DOCX support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <style>
         :root {
             --primary: #6366f1;
@@ -185,14 +188,9 @@
             position: relative;
         }
         
-        .document-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 10;
+        /* PDF specific styles */
+        .pdf-container {
+            position: relative;
         }
         
         .pdf-page {
@@ -201,29 +199,49 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
         
-        .typing-overlay {
+        .textLayer {
             position: absolute;
-            top: 0;
+            text-align: initial;
             left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            line-height: 1;
+            text-size-adjust: none;
+            transform-origin: 0% 0%;
         }
         
-        .typeable-element {
+        .textLayer span, .textLayer br {
+            color: transparent;
             position: absolute;
+            white-space: pre;
+            cursor: text;
+            transform-origin: 0% 0%;
+        }
+        
+        .textLayer .highlight {
+            margin: -1px;
+            padding: 1px;
+            background-color: rgba(180, 0, 170, 0.2);
+            border-radius: 4px;
+        }
+        
+        .textLayer .highlight.active {
+            background-color: rgba(0, 100, 255, 0.2);
+        }
+        
+        .typeable-span {
             background-color: rgba(99, 102, 241, 0.1);
             border-radius: 2px;
-            cursor: text;
-            pointer-events: all;
         }
         
-        .typeable-element.current {
-            background-color: rgba(99, 102, 241, 0.2);
+        .typeable-span.current {
+            background-color: rgba(99, 102, 241, 0.25);
             box-shadow: 0 0 0 2px var(--primary);
         }
         
-        .typeable-element.completed {
+        .typeable-span.completed {
             background-color: rgba(16, 185, 129, 0.1);
         }
         
@@ -273,7 +291,7 @@
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
         }
         
-        /* Text highlighting */
+        /* Character highlighting styles */
         .text-char {
             display: inline-block;
             position: relative;
@@ -305,6 +323,19 @@
         @keyframes blink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0; }
+        }
+        
+        /* Document formats */
+        .document-text {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 50px;
+            min-height: 1100px; /* A4 size approximately */
+            position: relative;
+            font-size: 16px;
+            line-height: 1.6;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
         
         /* Completion modal */
@@ -403,6 +434,10 @@
             .document-view {
                 padding: 15px;
             }
+            
+            .document-text {
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -420,14 +455,14 @@
             <main>
                 <div class="card">
                     <h2>Get Started</h2>
-                    <p>Upload a document to start practicing your typing skills. PDF documents work best for preserving formatting and images.</p>
+                    <p>Upload a document to start practicing your typing skills. Compatible with PDF, Word (DOCX), HTML, and TXT files.</p>
                     
                     <div class="upload-section" id="dropArea">
                         <div class="upload-icon">📄</div>
                         <p>Drag and drop your document here</p>
                         <p>or</p>
                         <button class="btn" id="uploadBtn">Choose a file</button>
-                        <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.html">
+                        <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.doc,.html,.htm,.rtf">
                         <p class="info-text">Your documents are processed locally - nothing is stored on our servers</p>
                     </div>
                 </div>
@@ -506,8 +541,6 @@
     <script>
         // PDF.js setup
         pdfjsLib = window['pdfjs-dist/build/pdf'];
-        
-        // Set the workerSrc property
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
         
         document.addEventListener('DOMContentLoaded', function() {
@@ -618,38 +651,41 @@
                 // Set document title
                 documentTitle.textContent = file.name;
                 
-                if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                // Clear previous typeable elements
+                typeableElements = [];
+                
+                const fileType = file.type.toLowerCase();
+                const fileName = file.name.toLowerCase();
+                
+                if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
                     loadingText.textContent = 'Processing PDF document...';
                     processPdfDocument(file);
-                } else if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt')) {
+                } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                          fileName.endsWith('.docx')) {
+                    loadingText.textContent = 'Processing Word document...';
+                    processWordDocument(file);
+                } else if (fileType === 'application/msword' || fileName.endsWith('.doc')) {
+                    loadingText.textContent = 'Processing Word document...';
+                    alert('Classic Word (.doc) files have limited support. For best results, save as .docx or PDF.');
+                    processTextDocument(file); // Fallback to text processing
+                } else if (fileType === 'text/plain' || fileName.endsWith('.txt')) {
                     loadingText.textContent = 'Processing text document...';
                     processTextDocument(file);
-                } else if (file.type.includes('word') || 
-                          file.name.toLowerCase().endsWith('.docx') || 
-                          file.name.toLowerCase().endsWith('.doc')) {
-                    loadingText.textContent = 'Processing Word document...';
-                    alert('Word documents may not display with proper formatting. For best results, use PDF files.');
-                    processTextDocument(file);
-                } else if (file.type === 'text/html' || 
-                          file.name.toLowerCase().endsWith('.html') || 
-                          file.name.toLowerCase().endsWith('.htm')) {
+                } else if (fileType === 'text/html' || fileName.endsWith('.html') || fileName.endsWith('.htm')) {
                     loadingText.textContent = 'Processing HTML document...';
                     processHtmlDocument(file);
+                } else if (fileType === 'application/rtf' || fileName.endsWith('.rtf')) {
+                    loadingText.textContent = 'Processing RTF document...';
+                    processTextDocument(file); // Basic fallback for RTF
                 } else {
-                    alert('Unsupported file type. Please use PDF, TXT, or HTML files for best results.');
+                    alert('Unsupported file type. Please use PDF, DOCX, TXT, HTML, or RTF files.');
                     loadingIndicator.style.display = 'none';
                 }
             }
             
-            // Process a PDF document
+            // Process a PDF document with proper text layer rendering
             async function processPdfDocument(file) {
                 try {
-                    // Initialize PDF.js
-                    const pdfjsLib = window.pdfjsLib;
-                    if (!pdfjsLib) {
-                        throw new Error("PDF.js library not loaded");
-                    }
-                    
                     // Create a URL for the PDF
                     const fileURL = URL.createObjectURL(file);
                     
@@ -657,9 +693,13 @@
                     const loadingTask = pdfjsLib.getDocument(fileURL);
                     const pdf = await loadingTask.promise;
                     
-                    // Clear the document viewport and typeable elements array
+                    // Clear the document viewport
                     documentViewport.innerHTML = '';
-                    typeableElements = [];
+                    
+                    // Create container for PDF pages
+                    const pdfContainer = document.createElement('div');
+                    pdfContainer.className = 'pdf-container';
+                    documentViewport.appendChild(pdfContainer);
                     
                     // Process each page
                     for (let i = 1; i <= pdf.numPages; i++) {
@@ -668,31 +708,32 @@
                         // Get the page
                         const page = await pdf.getPage(i);
                         
-                        // Create a canvas for the page
-                        const canvas = document.createElement('canvas');
-                        const context = canvas.getContext('2d');
-                        
-                        // Set the canvas dimensions
-                        const viewport = page.getViewport({ scale: 1.5 });
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-                        
-                        // Create a container for the page
+                        // Create a container for this page
                         const pageContainer = document.createElement('div');
                         pageContainer.className = 'pdf-page';
-                        pageContainer.style.width = `${viewport.width}px`;
-                        pageContainer.style.height = `${viewport.height}px`;
+                        pageContainer.dataset.pageNumber = i;
                         
-                        // Add the canvas to the page container
+                        // Create a canvas for rendering the page
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
                         pageContainer.appendChild(canvas);
                         
-                        // Create a typing overlay for this page
-                        const typingOverlay = document.createElement('div');
-                        typingOverlay.className = 'typing-overlay';
-                        pageContainer.appendChild(typingOverlay);
+                        // Create a text layer div
+                        const textLayerDiv = document.createElement('div');
+                        textLayerDiv.className = 'textLayer';
+                        pageContainer.appendChild(textLayerDiv);
                         
-                        // Add the page to the document
-                        documentViewport.appendChild(pageContainer);
+                        // Add the page to the container
+                        pdfContainer.appendChild(pageContainer);
+                        
+                        // Calculate a scale that fits the page width
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        
+                        // Set canvas dimensions
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        pageContainer.style.width = `${viewport.width}px`;
+                        pageContainer.style.height = `${viewport.height}px`;
                         
                         // Render the PDF page to the canvas
                         await page.render({
@@ -703,36 +744,57 @@
                         // Get the text content
                         const textContent = await page.getTextContent();
                         
-                        // Process text items for typing
-                        for (const textItem of textContent.items) {
-                            // Skip items with no text
-                            if (!textItem.str.trim()) continue;
+                        // The text items we'll make typeable
+                        const textItems = [];
+                        
+                        // Build the text layer
+                        const textLayerParams = {
+                            textContent: textContent,
+                            container: textLayerDiv,
+                            viewport: viewport,
+                            textDivs: []
+                        };
+                        
+                        // Create text spans for each text item
+                        textContent.items.forEach((item, index) => {
+                            if (!item.str.trim()) return; // Skip empty items
                             
-                            // Create a typeable element
-                            const typeableElement = document.createElement('div');
-                            typeableElement.className = 'typeable-element';
+                            // Create a span for this text
+                            const textSpan = document.createElement('span');
+                            textSpan.textContent = item.str;
                             
-                            // Set the position and dimensions based on the text item
-                            const itemViewport = viewport.clone({ dontFlip: true });
-                            const { width, height, transform } = textItem;
+                            // Calculate position
+                            const tx = pdfjsLib.Util.transform(
+                                viewport.transform,
+                                item.transform
+                            );
                             
-                            // Convert PDF coordinates to canvas coordinates
-                            const [a, b, c, d, e, f] = transform;
+                            // Apply styles
+                            const style = textSpan.style;
+                            style.left = `${tx[4]}px`;
+                            style.top = `${tx[5]}px`;
+                            style.fontSize = `${tx[0]}px`;
+                            style.fontFamily = 'sans-serif';
+                            style.transform = `scaleX(${tx[0] / tx[3]})`;
                             
-                            typeableElement.style.left = `${e}px`;
-                            typeableElement.style.top = `${itemViewport.height - f - height}px`;
-                            typeableElement.style.width = `${width}px`;
-                            typeableElement.style.height = `${height + 5}px`; // Add a little extra height
+                            // Add class for styling
+                            textSpan.className = 'typeable-span';
+                            textSpan.dataset.text = item.str;
+                            textSpan.dataset.index = index;
                             
-                            // Store the text content
-                            typeableElement.dataset.text = textItem.str;
+                            // Add to container
+                            textLayerDiv.appendChild(textSpan);
                             
-                            // Add the element to the typing overlay
-                            typingOverlay.appendChild(typeableElement);
-                            
-                            // Add to the typeable elements array
-                            typeableElements.push(typeableElement);
-                        }
+                            // Add to our array for typing
+                            textItems.push({
+                                element: textSpan,
+                                text: item.str,
+                                index: textItems.length
+                            });
+                        });
+                        
+                        // Add all text spans from this page to our typeable elements
+                        typeableElements = typeableElements.concat(textItems);
                     }
                     
                     // Hide loading indicator and show typing view
@@ -750,6 +812,52 @@
                 }
             }
             
+            // Process a Word document using Mammoth.js
+            function processWordDocument(file) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    
+                    mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+                        .then(result => {
+                            // Create document container
+                            const docContainer = document.createElement('div');
+                            docContainer.className = 'document-text';
+                            
+                            // Set the HTML content
+                            docContainer.innerHTML = result.value;
+                            
+                            // Clear viewport and add the document
+                            documentViewport.innerHTML = '';
+                            documentViewport.appendChild(docContainer);
+                            
+                            // Extract typeable elements
+                            extractTypeableElementsFromDoc(docContainer);
+                            
+                            // Hide loading indicator and show typing view
+                            loadingIndicator.style.display = 'none';
+                            welcomeScreen.style.display = 'none';
+                            typingView.style.display = 'block';
+                            
+                            // Initialize the typing session
+                            initializeTypingSession();
+                        })
+                        .catch(error => {
+                            console.error('Error processing Word document:', error);
+                            alert('There was an error processing the Word document. Try converting to PDF for better results.');
+                            processTextDocument(file); // Fallback to text processing
+                        });
+                };
+                
+                reader.onerror = function() {
+                    alert('There was an error reading the file. Please try again.');
+                    loadingIndicator.style.display = 'none';
+                };
+                
+                reader.readAsArrayBuffer(file);
+            }
+            
             // Process a text document
             function processTextDocument(file) {
                 const reader = new FileReader();
@@ -757,18 +865,9 @@
                 reader.onload = function(e) {
                     const text = e.target.result;
                     
-                    // Clear the document viewport and typeable elements array
-                    documentViewport.innerHTML = '';
-                    typeableElements = [];
-                    
-                    // Create a container for the text
-                    const textContainer = document.createElement('div');
-                    textContainer.style.padding = '20px';
-                    textContainer.style.lineHeight = '1.6';
-                    textContainer.style.fontSize = '16px';
-                    textContainer.style.maxWidth = '800px';
-                    textContainer.style.margin = '0 auto';
-                    textContainer.style.backgroundColor = 'white';
+                    // Create document container
+                    const docContainer = document.createElement('div');
+                    docContainer.className = 'document-text';
                     
                     // Split text into paragraphs
                     const paragraphs = text.split(/\n\s*\n/);
@@ -780,25 +879,21 @@
                         // Create paragraph element
                         const para = document.createElement('p');
                         para.style.marginBottom = '16px';
-                        para.style.position = 'relative';
                         
-                        // Create a typeable element that overlays the paragraph
-                        const typeableElement = document.createElement('div');
-                        typeableElement.className = 'typeable-element';
-                        typeableElement.dataset.text = paragraph;
-                        typeableElement.style.position = 'relative';
-                        typeableElement.style.padding = '5px';
-                        typeableElement.style.marginBottom = '16px';
+                        // Set text content
+                        para.textContent = paragraph;
                         
-                        // Add the typeable element directly to the container
-                        textContainer.appendChild(typeableElement);
-                        
-                        // Add to the typeable elements array
-                        typeableElements.push(typeableElement);
+                        // Add to document
+                        docContainer.appendChild(para);
                     });
                     
-                    // Add the text container to the document
-                    documentViewport.appendChild(textContainer);
+                    // Clear viewport and add the document
+                    documentViewport.innerHTML = '';
+                    documentViewport.appendChild(docContainer);
+                    
+                    // Extract typeable elements
+                    // Extract typeable elements
+                    extractTypeableElementsFromDoc(docContainer);
                     
                     // Hide loading indicator and show typing view
                     loadingIndicator.style.display = 'none';
@@ -824,28 +919,24 @@
                 reader.onload = function(e) {
                     const htmlContent = e.target.result;
                     
-                    // Clear the document viewport
-                    documentViewport.innerHTML = '';
+                    // Create document container
+                    const docContainer = document.createElement('div');
+                    docContainer.className = 'document-text';
                     
-                    // Create a container for the HTML content
-                    const htmlContainer = document.createElement('div');
-                    htmlContainer.innerHTML = htmlContent;
-                    
-                    // Extract text nodes for typing
-                    const textElements = htmlContainer.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, span, div');
-                    
-                    textElements.forEach(element => {
-                        if (!element.textContent.trim()) return;
+                    // Set the HTML content with some sanitization
+                    // Remove scripts and potentially harmful elements
+                    const sanitizedHtml = htmlContent
+                        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                        .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
                         
-                        // Add this element to typeable elements
-                        typeableElements.push({
-                            element: element,
-                            text: element.textContent
-                        });
-                    });
+                    docContainer.innerHTML = sanitizedHtml;
                     
-                    // Add the HTML container to the document
-                    documentViewport.appendChild(htmlContainer);
+                    // Clear viewport and add the document
+                    documentViewport.innerHTML = '';
+                    documentViewport.appendChild(docContainer);
+                    
+                    // Extract typeable elements
+                    extractTypeableElementsFromDoc(docContainer);
                     
                     // Hide loading indicator and show typing view
                     loadingIndicator.style.display = 'none';
@@ -862,6 +953,52 @@
                 };
                 
                 reader.readAsText(file);
+            }
+            
+            // Extract typeable elements from document container
+            function extractTypeableElementsFromDoc(container) {
+                // Clear previous typeable elements
+                typeableElements = [];
+                
+                // Get all text nodes that should be typeable
+                const textElements = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
+                
+                textElements.forEach(element => {
+                    // Skip elements with no text
+                    if (!element.textContent.trim()) return;
+                    
+                    // Create a wrapper for this element if it doesn't exist
+                    let wrapper = element.querySelector('.typeable-wrapper');
+                    if (!wrapper) {
+                        // Save the original text
+                        const originalText = element.textContent;
+                        
+                        // Create a wrapper
+                        wrapper = document.createElement('div');
+                        wrapper.className = 'typeable-wrapper';
+                        wrapper.dataset.text = originalText;
+                        
+                        // Replace the element's content with the wrapper
+                        element.innerHTML = '';
+                        element.appendChild(wrapper);
+                        
+                        // Create spans for each character
+                        for (let i = 0; i < originalText.length; i++) {
+                            const charSpan = document.createElement('span');
+                            charSpan.className = 'text-char';
+                            charSpan.textContent = originalText[i];
+                            charSpan.dataset.index = i;
+                            wrapper.appendChild(charSpan);
+                        }
+                    }
+                    
+                    // Add to typeable elements
+                    typeableElements.push({
+                        element: wrapper,
+                        text: wrapper.dataset.text,
+                        index: typeableElements.length
+                    });
+                });
             }
             
             // Initialize the typing session
@@ -889,11 +1026,6 @@
             
             // Highlight the current typeable element
             function highlightCurrentElement() {
-                // Remove highlight from all elements
-                document.querySelectorAll('.typeable-element').forEach(el => {
-                    el.classList.remove('current');
-                });
-                
                 // If we have no typeable elements, return
                 if (typeableElements.length === 0) return;
                 
@@ -904,53 +1036,72 @@
                 }
                 
                 // Get the current element
-                const currentElement = typeableElements[currentElementIndex];
+                const currentItem = typeableElements[currentElementIndex];
                 
-                // Highlight the current element
-                currentElement.classList.add('current');
-                
-                // Scroll to the element
-                currentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // For PDF typeable spans
+                if (currentItem.element.classList.contains('typeable-span')) {
+                    // Remove current class from all spans
+                    document.querySelectorAll('.typeable-span').forEach(span => {
+                        span.classList.remove('current');
+                        span.classList.remove('completed');
+                    });
+                    
+                    // Add current class to this span
+                    currentItem.element.classList.add('current');
+                    
+                    // Scroll to the element
+                    currentItem.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Prepare the element for typing
+                    prepareElementForTyping(currentItem.element);
+                } 
+                // For text document typeable elements
+                else if (currentItem.element.classList.contains('typeable-wrapper')) {
+                    // Remove current class from all wrappers
+                    document.querySelectorAll('.typeable-wrapper').forEach(wrapper => {
+                        wrapper.classList.remove('current');
+                        wrapper.classList.remove('completed');
+                    });
+                    
+                    // Add current class to this wrapper
+                    currentItem.element.classList.add('current');
+                    
+                    // Scroll to the element
+                    currentItem.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Update current char highlighting
+                    highlightCurrentChar(currentItem.element);
+                }
                 
                 // Update the typing input placeholder
-                typingInput.placeholder = `Type: "${currentElement.dataset.text.substring(0, 40)}${currentElement.dataset.text.length > 40 ? '...' : ''}"`;
-                
-                // Prepare the element for character-by-character highlighting
-                prepareElementForTyping(currentElement);
+                const previewText = currentItem.text.substring(0, 40) + (currentItem.text.length > 40 ? '...' : '');
+                typingInput.placeholder = `Type: "${previewText}"`;
             }
             
             // Prepare an element for character-by-character typing
             function prepareElementForTyping(element) {
-                const text = element.dataset.text;
-                let html = '';
-                
-                // Create a span for each character
-                for (let i = 0; i < text.length; i++) {
-                    const char = text[i];
-                    html += `<span class="text-char" data-index="${i}">${char}</span>`;
+                // PDF typeable span doesn't need preparation
+                if (element.classList.contains('typeable-span')) {
+                    return;
                 }
                 
-                // Create an inner container for the formatted text
-                const innerContainer = document.createElement('div');
-                innerContainer.className = 'typed-text-container';
-                innerContainer.innerHTML = html;
-                
-                // Clear the element and add the inner container
-                element.innerHTML = '';
-                element.appendChild(innerContainer);
-                
-                // Highlight the first character
-                highlightCurrentChar();
+                // For text document typeable elements, highlight current char
+                highlightCurrentChar(element);
             }
             
             // Highlight the current character
-            function highlightCurrentChar() {
+            function highlightCurrentChar(element) {
+                // If it's a PDF span, we don't highlight individual characters
+                if (element && element.classList.contains('typeable-span')) {
+                    return;
+                }
+                
                 // Get the current element
-                const currentElement = typeableElements[currentElementIndex];
-                if (!currentElement) return;
+                const currentItem = typeableElements[currentElementIndex];
+                if (!currentItem || !currentItem.element) return;
                 
                 // Get all character spans
-                const charSpans = currentElement.querySelectorAll('.text-char');
+                const charSpans = currentItem.element.querySelectorAll('.text-char');
                 
                 // Remove current class from all spans
                 charSpans.forEach(span => {
@@ -992,8 +1143,8 @@
                 if (currentElementIndex >= typeableElements.length) return;
                 
                 // Get the current element and its text
-                const currentElement = typeableElements[currentElementIndex];
-                const text = currentElement.dataset.text;
+                const currentItem = typeableElements[currentElementIndex];
+                const text = currentItem.text;
                 
                 // If we've reached the end of the current element's text
                 if (currentCharIndex >= text.length) {
@@ -1014,42 +1165,77 @@
                 // Get the expected character
                 const expectedChar = text[currentCharIndex];
                 
-                // Get the character span
-                const charSpans = currentElement.querySelectorAll('.text-char');
-                const currentSpan = charSpans[currentCharIndex];
-                
-                if (typedChar === expectedChar) {
-                    // Correct character
-                    currentSpan.classList.add('correct');
-                    currentCharIndex++;
-                } else {
-                    // Incorrect character
-                    currentSpan.classList.add('incorrect');
-                    errors++;
-                    currentCharIndex++;
+                // Special handling for PDF spans vs. text document elements
+                if (currentItem.element.classList.contains('typeable-span')) {
+                    // For PDF spans, we just mark the whole span
+                    if (typedChar === expectedChar) {
+                        currentCharIndex++;
+                    } else {
+                        errors++;
+                        currentCharIndex++;
+                    }
+                    
+                    // Check if we completed this span
+                    if (currentCharIndex >= text.length) {
+                        // Mark as completed
+                        currentItem.element.classList.remove('current');
+                        currentItem.element.classList.add('completed');
+                        
+                        // Move to next element
+                        setTimeout(() => {
+                            currentElementIndex++;
+                            currentCharIndex = 0;
+                            
+                            // Update stats
+                            updateStats();
+                            
+                            // Highlight the next element
+                            highlightCurrentElement();
+                        }, 100);
+                    }
                 }
-                
-                // Update display
-                highlightCurrentChar();
+                // For text document elements, we highlight individual characters
+                else if (currentItem.element.classList.contains('typeable-wrapper')) {
+                    // Get the character span
+                    const charSpans = currentItem.element.querySelectorAll('.text-char');
+                    const currentSpan = charSpans[currentCharIndex];
+                    
+                    if (typedChar === expectedChar) {
+                        // Correct character
+                        currentSpan.classList.add('correct');
+                        currentCharIndex++;
+                    } else {
+                        // Incorrect character
+                        currentSpan.classList.add('incorrect');
+                        errors++;
+                        currentCharIndex++;
+                    }
+                    
+                    // Update display
+                    highlightCurrentChar(currentItem.element);
+                    
+                    // Check if we've reached the end of the current element
+                    if (currentCharIndex >= text.length) {
+                        // Move to the next element
+                        setTimeout(() => {
+                            currentElementIndex++;
+                            currentCharIndex = 0;
+                            
+                            // Mark the current element as completed
+                            currentItem.element.classList.remove('current');
+                            currentItem.element.classList.add('completed');
+                            
+                            // Update stats
+                            updateStats();
+                            
+                            // Highlight the next element
+                            highlightCurrentElement();
+                        }, 100);
+                    }
+                }
                 
                 // Update stats
                 updateStats();
-                
-                // Check if we've reached the end of the current element
-                if (currentCharIndex >= text.length) {
-                    // Move to the next element
-                    setTimeout(() => {
-                        currentElementIndex++;
-                        currentCharIndex = 0;
-                        
-                        // Mark the current element as completed
-                        currentElement.classList.remove('current');
-                        currentElement.classList.add('completed');
-                        
-                        // Highlight the next element
-                        highlightCurrentElement();
-                    }, 300); // Small delay for better visual feedback
-                }
             });
             
             // Update the statistics
@@ -1062,8 +1248,8 @@
                 
                 // Calculate total characters in all typeable elements
                 let totalChars = 0;
-                typeableElements.forEach(element => {
-                    totalChars += element.dataset.text.length;
+                typeableElements.forEach(item => {
+                    totalChars += item.text.length;
                 });
                 
                 // Calculate WPM (assuming average word is 5 characters)
@@ -1077,7 +1263,7 @@
                 // Calculate progress
                 let completedChars = 0;
                 for (let i = 0; i < currentElementIndex; i++) {
-                    completedChars += typeableElements[i].dataset.text.length;
+                    completedChars += typeableElements[i].text.length;
                 }
                 completedChars += currentCharIndex;
                 
@@ -1099,8 +1285,8 @@
                 
                 // Calculate total characters in all typeable elements
                 let totalChars = 0;
-                typeableElements.forEach(element => {
-                    totalChars += element.dataset.text.length;
+                typeableElements.forEach(item => {
+                    totalChars += item.text.length;
                 });
                 
                 // Calculate WPM
@@ -1130,9 +1316,19 @@
                 totalTyped = 0;
                 isTyping = false;
                 
-                // Reset all elements to their original state
-                typeableElements.forEach(element => {
-                    element.classList.remove('current', 'completed');
+                // Reset PDF spans
+                document.querySelectorAll('.typeable-span').forEach(span => {
+                    span.classList.remove('current', 'completed');
+                });
+                
+                // Reset text document elements
+                document.querySelectorAll('.typeable-wrapper').forEach(wrapper => {
+                    wrapper.classList.remove('current', 'completed');
+                    
+                    // Reset character spans
+                    wrapper.querySelectorAll('.text-char').forEach(charSpan => {
+                        charSpan.classList.remove('current', 'correct', 'incorrect');
+                    });
                 });
                 
                 // Focus on the input
