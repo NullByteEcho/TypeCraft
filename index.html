@@ -188,8 +188,8 @@
             position: relative;
         }
         
-        /* Typing input styles */
-        .typing-input-container {
+        /* Typing progress bar */
+        .typing-progress-bar {
             position: sticky;
             bottom: 0;
             padding: 15px;
@@ -198,13 +198,8 @@
             border-radius: 0 0 var(--border-radius) var(--border-radius);
             box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
             display: flex;
-            flex-direction: column;
-        }
-        
-        .typing-progress {
-            display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
+            z-index: 50;
         }
         
         .typing-progress-item {
@@ -220,27 +215,13 @@
             margin-left: 5px;
         }
         
-        .typing-input {
-            width: 100%;
-            padding: 12px 15px;
-            font-size: 16px;
-            border: 2px solid #cbd5e1;
-            border-radius: var(--border-radius);
-            transition: all 0.3s ease;
-        }
-        
-        .typing-input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
-        }
-        
         /* Character highlighting styles */
         .text-char {
             display: inline-block;
             position: relative;
             letter-spacing: normal;
             padding: 0 1px;
+            user-select: none; /* Prevent text selection */
         }
         
         .text-char.current {
@@ -374,6 +355,41 @@
             100% { transform: rotate(360deg); }
         }
         
+        /* Typeable wrapper - making the document directly typeable */
+        .typeable-wrapper {
+            position: relative;
+            outline: none;
+        }
+        
+        .typeable-wrapper.current {
+            background-color: rgba(99, 102, 241, 0.05);
+            border-radius: 4px;
+            padding: 2px;
+        }
+        
+        .typeable-wrapper.completed {
+            background-color: rgba(16, 185, 129, 0.05);
+        }
+
+        /* Save indicator */
+        .save-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: var(--border-radius);
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .save-indicator.visible {
+            opacity: 1;
+        }
+        
         /* Responsive design */
         @media (max-width: 768px) {
             .document-container {
@@ -423,6 +439,11 @@
                         <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.doc,.html,.htm,.rtf">
                         <p class="info-text">Your documents are processed locally - nothing is stored on our servers</p>
                     </div>
+                    
+                    <div id="savedSessionsContainer" style="display: none;">
+                        <h3>Continue where you left off</h3>
+                        <div id="savedSessionsList"></div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -436,6 +457,7 @@
                 <div class="nav-controls">
                     <button class="btn btn-secondary" id="backToMainBtn">Back to Main</button>
                     <button class="btn" id="resetTypingBtn">Reset Progress</button>
+                    <button class="btn" id="saveProgressBtn">Save Progress</button>
                 </div>
             </div>
             
@@ -446,19 +468,16 @@
                     </div>
                 </div>
                 
-                <div class="typing-input-container">
-                    <div class="typing-progress">
-                        <div class="typing-progress-item">
-                            WPM: <span class="typing-progress-value" id="wpmValue">0</span>
-                        </div>
-                        <div class="typing-progress-item">
-                            Accuracy: <span class="typing-progress-value" id="accuracyValue">0%</span>
-                        </div>
-                        <div class="typing-progress-item">
-                            Progress: <span class="typing-progress-value" id="progressValue">0%</span>
-                        </div>
+                <div class="typing-progress-bar">
+                    <div class="typing-progress-item">
+                        WPM: <span class="typing-progress-value" id="wpmValue">0</span>
                     </div>
-                    <input type="text" class="typing-input" id="typingInput" placeholder="Type the highlighted text...">
+                    <div class="typing-progress-item">
+                        Accuracy: <span class="typing-progress-value" id="accuracyValue">0%</span>
+                    </div>
+                    <div class="typing-progress-item">
+                        Progress: <span class="typing-progress-value" id="progressValue">0%</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -494,6 +513,9 @@
             <div class="spinner"></div>
             <p id="loadingText">Processing document...</p>
         </div>
+        
+        <!-- Save Indicator -->
+        <div class="save-indicator" id="saveIndicator">Progress saved</div>
     </div>
     
     <script>
@@ -507,15 +529,17 @@
             const dropArea = document.getElementById('dropArea');
             const uploadBtn = document.getElementById('uploadBtn');
             const fileInput = document.getElementById('fileInput');
+            const savedSessionsContainer = document.getElementById('savedSessionsContainer');
+            const savedSessionsList = document.getElementById('savedSessionsList');
             
             // DOM elements - Typing view
             const typingView = document.getElementById('typingView');
             const documentTitle = document.getElementById('documentTitle');
             const documentView = document.getElementById('documentView');
             const documentViewport = document.getElementById('documentViewport');
-            const typingInput = document.getElementById('typingInput');
             const backToMainBtn = document.getElementById('backToMainBtn');
             const resetTypingBtn = document.getElementById('resetTypingBtn');
+            const saveProgressBtn = document.getElementById('saveProgressBtn');
             
             // DOM elements - Progress indicators
             const wpmValue = document.getElementById('wpmValue');
@@ -530,12 +554,14 @@
             const tryAgainBtn = document.getElementById('tryAgainBtn');
             const newDocumentBtn = document.getElementById('newDocumentBtn');
             
-            // DOM elements - Loading indicator
+            // DOM elements - Loading and save indicators
             const loadingIndicator = document.getElementById('loadingIndicator');
             const loadingText = document.getElementById('loadingText');
+            const saveIndicator = document.getElementById('saveIndicator');
             
             // State variables
             let currentFile = null;
+            let currentFileName = '';
             let typeableElements = [];
             let currentElementIndex = 0;
             let currentCharIndex = 0;
@@ -544,6 +570,11 @@
             let totalTyped = 0;
             let correctlyTyped = 0; // Track correctly typed characters for accurate WPM
             let isTyping = false;
+            let fileContent = null; // Store file content for saving progress
+            let fileType = ''; // Store file type for saving progress
+            
+            // Check for saved sessions
+            checkSavedSessions();
             
             // Event listeners for file input
             uploadBtn.addEventListener('click', () => fileInput.click());
@@ -552,6 +583,7 @@
                 const file = event.target.files[0];
                 if (file) {
                     currentFile = file;
+                    currentFileName = file.name;
                     processDocument(file);
                 }
             });
@@ -576,6 +608,7 @@
                 const file = e.dataTransfer.files[0];
                 if (file) {
                     currentFile = file;
+                    currentFileName = file.name;
                     processDocument(file);
                 }
             });
@@ -584,10 +617,15 @@
             backToMainBtn.addEventListener('click', () => {
                 typingView.style.display = 'none';
                 welcomeScreen.style.display = 'block';
+                checkSavedSessions(); // Refresh saved sessions list
             });
             
             resetTypingBtn.addEventListener('click', () => {
                 resetTypingSession();
+            });
+            
+            saveProgressBtn.addEventListener('click', () => {
+                saveProgress();
             });
             
             tryAgainBtn.addEventListener('click', () => {
@@ -600,7 +638,60 @@
                 typingView.style.display = 'none';
                 welcomeScreen.style.display = 'block';
                 fileInput.value = '';
+                checkSavedSessions(); // Refresh saved sessions list
             });
+            
+            // Add keyboard event listener for the entire document
+            document.addEventListener('keydown', handleKeyDown);
+            
+            // Check for saved sessions
+            function checkSavedSessions() {
+                const savedSessions = getSavedSessions();
+                
+                if (savedSessions.length > 0) {
+                    savedSessionsContainer.style.display = 'block';
+                    savedSessionsList.innerHTML = '';
+                    
+                    savedSessions.forEach(session => {
+                        const sessionItem = document.createElement('div');
+                        sessionItem.className = 'card';
+                        sessionItem.style.marginBottom = '10px';
+                        sessionItem.style.cursor = 'pointer';
+                        
+                        const progress = Math.round(session.progress * 100);
+                        
+                        sessionItem.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h4>${session.fileName}</h4>
+                                    <p>Progress: ${progress}%</p>
+                                </div>
+                                <div>
+                                    <button class="btn" data-filename="${session.fileName}">Continue</button>
+                                    <button class="btn btn-secondary" data-filename="${session.fileName}" data-action="delete">Delete</button>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // Add event listener to the continue button
+                        sessionItem.querySelector('button[data-action="delete"]').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const fileName = e.target.dataset.filename;
+                            deleteSavedSession(fileName);
+                            checkSavedSessions();
+                        });
+                        
+                        // Add event listener to the continue button
+                        sessionItem.querySelector('button:not([data-action])').addEventListener('click', () => {
+                            loadSavedSession(session.fileName);
+                        });
+                        
+                        savedSessionsList.appendChild(sessionItem);
+                    });
+                } else {
+                    savedSessionsContainer.style.display = 'none';
+                }
+            }
             
             // Enhanced text processing function that handles headings better
             function processTextContent(text, isHeading = false) {
@@ -642,7 +733,7 @@
                 // Clear previous typeable elements
                 typeableElements = [];
                 
-                const fileType = file.type.toLowerCase();
+                fileType = file.type.toLowerCase();
                 const fileName = file.name.toLowerCase();
                 
                 if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
@@ -674,6 +765,13 @@
             // Simplified PDF processing - convert to text instead of overlay
             async function processPdfDocument(file) {
                 try {
+                    // Read the file content for saving later
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        fileContent = e.target.result;
+                    };
+                    reader.readAsArrayBuffer(file);
+                    
                     // Create a URL for the PDF
                     const fileURL = URL.createObjectURL(file);
                     
@@ -696,163 +794,177 @@
                         
                         // Extract text content
                         const textContent = await page.getTextContent();
-                        let pageText = '';
                         
-                        // Process text items and build coherent paragraphs
-                        let lastY = null;
-                        let paragraph = '';
+                        // Fix for the skipped lines issue - we need to track positions better
+                        // Group text items by their vertical position (y-coordinate)
+                        const textByPosition = {};
                         
-                        // Sort text items by y-position (top to bottom)
-                        const sortedItems = textContent.items.sort((a, b) => b.transform[5] - a.transform[5]);
-                        
-                        for (const item of sortedItems) {
-                            if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
-                                // New line detected
-                                if (paragraph.trim()) {
-                                    pageText += paragraph.trim() + '\n\n';
-                                    paragraph = '';
-                                }
+                        textContent.items.forEach(item => {
+                            const y = Math.round(item.transform[5]); // Round to handle minor position differences
+                            if (!textByPosition[y]) {
+                                textByPosition[y] = [];
                             }
+                            textByPosition[y].push(item);
+                        });
+                        
+                        // Sort positions from top to bottom
+                        const positions = Object.keys(textByPosition).map(Number).sort((a, b) => b - a);
+                        
+                        // Process text line by line
+                        for (const pos of positions) {
+                            // Sort items within a line from left to right
+                            const lineItems = textByPosition[pos].sort((a, b) => a.transform[4] - b.transform[4]);
                             
-                            paragraph += item.str + ' ';
-                            lastY = item.transform[5];
+                            // Convert line to text
+                            let line = lineItems.map(item => item.str).join(' ');
+                            
+                            // Check if this is likely a continuation of the previous line
+                            if (line.trim() && !line.trim().endsWith('.') && 
+                                !line.trim().endsWith('?') && !line.trim().endsWith('!') && 
+                                line.length < 50) {
+                                fullText += line + ' ';
+                            } else {
+                                fullText += line + '\n';
+                            }
                         }
                         
-                        // Add the last paragraph
-                        if (paragraph.trim()) {
-                            pageText += paragraph.trim();
-                        }
-                        
-                        fullText += pageText + '\n\n';
+                        // Add page break
+                        fullText += '\n\n';
                     }
                     
                     // Process text into structured document with headings detection
                     const lines = fullText.split('\n');
-                    let currentElement = null;
                     
-                    // Try to detect headings by size, boldness, etc.
+                    // Try to detect headings and paragraphs
                     for (let i = 0; i < lines.length; i++) {
                         const line = lines[i].trim();
                         if (!line) continue;
                         
                         // Simple heuristic for headings: shorter lines that are not followed by much text
-                        const isLikelyHeading = line.length < 100 && 
-                                              (!lines[i+1] || !lines[i+1].trim() || lines[i+1].trim().length < line.length) &&
-                                              (line.toUpperCase() === line || /^[A-Z][\w\s]+$/.test(line));
-                        
-                        if (isLikelyHeading) {
-                            // Create heading element
-                            const headingLevel = line.length < 30 ? 'h2' : 'h3';
-                            const heading = document.createElement(headingLevel);
-                            // Process heading text to fix spacing issues
-                            heading.textContent = processTextContent(line, true);
-                            docContainer.appendChild(heading);
-                        } else {
-                            // Create paragraph element
-                            const para = document.createElement('p');
-                            para.textContent = processTextContent(line);
-                            docContainer.appendChild(para);
-                        }
-                    }
-                    
-                    // Clear viewport and add the document
-                    documentViewport.innerHTML = '';
-                    documentViewport.appendChild(docContainer);
-                    
-                    // Extract typeable elements
-                    extractTypeableElementsFromDoc(docContainer);
-                    
-                    // Hide loading indicator and show typing view
-                    loadingIndicator.style.display = 'none';
-                    welcomeScreen.style.display = 'none';
-                    typingView.style.display = 'block';
-                    
-                    // Initialize the typing session
-                    initializeTypingSession();
-                    
-                } catch (error) {
-                    console.error('Error processing PDF:', error);
-                    alert('There was an error processing the PDF. Try a different document or format.');
-                    loadingIndicator.style.display = 'none';
-                }
-            }
-            
-            // Process a Word document using Mammoth.js
-            function processWordDocument(file) {
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    const arrayBuffer = e.target.result;
-                    
-                    mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
-                        .then(result => {
-                            // Create document container
-                            const docContainer = document.createElement('div');
-                            docContainer.className = 'document-text';
-                            
-                            // Set the HTML content
-                            docContainer.innerHTML = result.value;
-                            
-                            // Process text in headings to fix spacing issues
-                            const headings = docContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                            headings.forEach(heading => {
-                                heading.textContent = processTextContent(heading.textContent, true);
-                            });
-                            
-                            // Clear viewport and add the document
-                            documentViewport.innerHTML = '';
-                            documentViewport.appendChild(docContainer);
-                            
-                            // Extract typeable elements
-                            extractTypeableElementsFromDoc(docContainer);
-                            
-                            // Hide loading indicator and show typing view
-                            loadingIndicator.style.display = 'none';
-                            welcomeScreen.style.display = 'none';
-                            typingView.style.display = 'block';
-                            
-                            // Initialize the typing session
-                            initializeTypingSession();
-                        })
-                        .catch(error => {
-                            console.error('Error processing Word document:', error);
-                            alert('There was an error processing the Word document. Try converting to PDF for better results.');
-                            processTextDocument(file); // Fallback to text processing
-                        });
-                };
-                
-                reader.onerror = function() {
-                    alert('There was an error reading the file. Please try again.');
-                    loadingIndicator.style.display = 'none';
-                };
-                
-                reader.readAsArrayBuffer(file);
-            }
-            
-            // Process a text document
-            function processTextDocument(file) {
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    const text = e.target.result;
-                    
-                    // Create document container
-                    const docContainer = document.createElement('div');
-                    docContainer.className = 'document-text';
-                    
-                    // Split text into paragraphs
-                    const paragraphs = text.split(/\n\s*\n/);
-                    
-                    // Process each paragraph
-                    paragraphs.forEach(paragraph => {
-                        if (!paragraph.trim()) return;
-                        
-                        // Check if this is likely a heading (short line, all caps, etc.)
-                        const isLikelyHeading = paragraph.trim().length < 100 && 
-                                              (paragraph.toUpperCase() === paragraph || 
-                                               /^#+ /.test(paragraph) || 
-                                               /^[A-Z][\w\s]+$/.test(paragraph));
-                        // Create appropriate element based on content
+                       const isLikelyHeading = line.length < 100 && 
+                                             (!lines[i+1] || !lines[i+1].trim() || lines[i+1].trim().length < line.length) &&
+                                             (line.toUpperCase() === line || /^[A-Z][\w\s]+$/.test(line));
+                       
+                       if (isLikelyHeading) {
+                           // Create heading element
+                           const headingLevel = line.length < 30 ? 'h2' : 'h3';
+                           const heading = document.createElement(headingLevel);
+                           // Process heading text to fix spacing issues
+                           heading.textContent = processTextContent(line, true);
+                           docContainer.appendChild(heading);
+                       } else {
+                           // Create paragraph element
+                           const para = document.createElement('p');
+                           para.textContent = processTextContent(line);
+                           docContainer.appendChild(para);
+                       }
+                   }
+                   
+                   // Clear viewport and add the document
+                   documentViewport.innerHTML = '';
+                   documentViewport.appendChild(docContainer);
+                   
+                   // Extract typeable elements
+                   extractTypeableElementsFromDoc(docContainer);
+                   
+                   // Hide loading indicator and show typing view
+                   loadingIndicator.style.display = 'none';
+                   welcomeScreen.style.display = 'none';
+                   typingView.style.display = 'block';
+                   
+                   // Initialize the typing session
+                   initializeTypingSession();
+                   
+               } catch (error) {
+                   console.error('Error processing PDF:', error);
+                   alert('There was an error processing the PDF. Try a different document or format.');
+                   loadingIndicator.style.display = 'none';
+               }
+           }
+           
+           // Process a Word document using Mammoth.js
+           function processWordDocument(file) {
+               const reader = new FileReader();
+               
+               reader.onload = function(e) {
+                   // Save the file content for later
+                   fileContent = e.target.result;
+                   
+                   const arrayBuffer = e.target.result;
+                   
+                   mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+                       .then(result => {
+                           // Create document container
+                           const docContainer = document.createElement('div');
+                           docContainer.className = 'document-text';
+                           
+                           // Set the HTML content
+                           docContainer.innerHTML = result.value;
+                           
+                           // Process headings to fix spacing issues
+                           const headings = docContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                           headings.forEach(heading => {
+                               heading.textContent = processTextContent(heading.textContent, true);
+                           });
+                           
+                           // Clear viewport and add the document
+                           documentViewport.innerHTML = '';
+                           documentViewport.appendChild(docContainer);
+                           
+                           // Extract typeable elements
+                           extractTypeableElementsFromDoc(docContainer);
+                           
+                           // Hide loading indicator and show typing view
+                           loadingIndicator.style.display = 'none';
+                           welcomeScreen.style.display = 'none';
+                           typingView.style.display = 'block';
+                           
+                           // Initialize the typing session
+                           initializeTypingSession();
+                       })
+                       .catch(error => {
+                           console.error('Error processing Word document:', error);
+                           alert('There was an error processing the Word document. Try converting to PDF for better results.');
+                           processTextDocument(file); // Fallback to text processing
+                       });
+               };
+               
+               reader.onerror = function() {
+                   alert('There was an error reading the file. Please try again.');
+                   loadingIndicator.style.display = 'none';
+               };
+               
+               reader.readAsArrayBuffer(file);
+           }
+           
+           // Process a text document
+           function processTextDocument(file) {
+               const reader = new FileReader();
+               
+               reader.onload = function(e) {
+                   // Save the file content for later
+                   fileContent = e.target.result;
+                   
+                   const text = e.target.result;
+                   
+                   // Create document container
+                   const docContainer = document.createElement('div');
+                   docContainer.className = 'document-text';
+                   
+                   // Split text into paragraphs
+                   const paragraphs = text.split(/\n\s*\n/);
+                   
+                   // Process each paragraph
+                   paragraphs.forEach(paragraph => {
+                       if (!paragraph.trim()) return;
+                       
+                       // Check if this is likely a heading (short line, all caps, etc.)
+                       const isLikelyHeading = paragraph.trim().length < 100 && 
+                                             (paragraph.toUpperCase() === paragraph || 
+                                              /^#+ /.test(paragraph) || 
+                                              /^[A-Z][\w\s]+$/.test(paragraph));
+                       
+                       // Create appropriate element based on content
                        if (isLikelyHeading) {
                            // Create heading element
                            const headingLevel = paragraph.trim().length < 30 ? 'h2' : 'h3';
@@ -904,6 +1016,9 @@
                const reader = new FileReader();
                
                reader.onload = function(e) {
+                   // Save the file content for later
+                   fileContent = e.target.result;
+                   
                    const htmlContent = e.target.result;
                    
                    // Create document container
@@ -973,6 +1088,7 @@
                        wrapper = document.createElement('div');
                        wrapper.className = 'typeable-wrapper';
                        wrapper.dataset.text = originalText;
+                       wrapper.tabIndex = 0; // Make it focusable
                        
                        // Replace the element's content with the wrapper
                        element.innerHTML = '';
@@ -1000,26 +1116,30 @@
            
            // Initialize the typing session
            function initializeTypingSession() {
-               // Reset state
-               currentElementIndex = 0;
-               currentCharIndex = 0;
-               startTime = null;
-               errors = 0;
-               totalTyped = 0;
-               correctlyTyped = 0;
-               isTyping = false;
+               // Reset state if not loading a saved session
+               if (!isLoadingSavedSession) {
+                   currentElementIndex = 0;
+                   currentCharIndex = 0;
+                   startTime = null;
+                   errors = 0;
+                   totalTyped = 0;
+                   correctlyTyped = 0;
+                   isTyping = false;
+               }
                
-               // Focus on the input
-               typingInput.value = '';
-               typingInput.focus();
+               // Set flag back to false
+               isLoadingSavedSession = false;
                
                // Reset stats
                wpmValue.textContent = '0';
                accuracyValue.textContent = '0%';
                progressValue.textContent = '0%';
                
-               // Highlight the first element
+               // Highlight the current element
                highlightCurrentElement();
+               
+               // Set focus to the document for typing
+               documentViewport.focus();
            }
            
            // Highlight the current typeable element
@@ -1050,10 +1170,6 @@
                
                // Update current char highlighting
                highlightCurrentChar(currentItem.element);
-               
-               // Update the typing input placeholder
-               const previewText = currentItem.text.substring(0, 40) + (currentItem.text.length > 40 ? '...' : '');
-               typingInput.placeholder = `Type: "${previewText}"`;
            }
            
            // Highlight the current character
@@ -1084,64 +1200,67 @@
                }
            }
            
-           // Handle backspace between elements
-           function handleBackspaceBetweenElements() {
-               // If we're at the beginning of an element and backspace is pressed
-               if (currentCharIndex === 0 && currentElementIndex > 0) {
-                   // Move to the previous element
-                   currentElementIndex--;
-                   const prevItem = typeableElements[currentElementIndex];
-                   // Set cursor at the end of the previous element
-                   currentCharIndex = prevItem.text.length;
-                   
-                   // Update highlighting
-                   highlightCurrentElement();
-               }
-           }
-           
-           // Typing input event
-           typingInput.addEventListener('input', (e) => {
+           // Handle key down events for typing
+           function handleKeyDown(e) {
+               // Only handle typing when the typing view is shown
+               if (typingView.style.display !== 'block') return;
+               
+               // Skip if we've reached the end
+               if (currentElementIndex >= typeableElements.length) return;
+               
+               // Skip control keys except Backspace
+               if (e.ctrlKey || e.altKey || e.metaKey) return;
+               
+               // Start timing on first keypress
                if (!isTyping) {
                    startTime = new Date();
                    isTyping = true;
                }
                
                // Get the current element and its text
-               if (currentElementIndex >= typeableElements.length) return;
                const currentItem = typeableElements[currentElementIndex];
                const text = currentItem.text;
                
-               // Check if backspace was pressed
-               if (e.inputType === 'deleteContentBackward') {
+               // Handle Backspace key
+               if (e.key === 'Backspace') {
+                   // Prevent default behavior
+                   e.preventDefault();
+                   
                    // Only allow backspace if we're not at the beginning
                    if (currentCharIndex > 0) {
                        currentCharIndex--;
                        
-                       // For text document elements with character spans
-                       const charSpans = currentItem.element.querySelectorAll('.text-char');
                        // Remove any correct/incorrect classes from the current character
+                       const charSpans = currentItem.element.querySelectorAll('.text-char');
                        if (currentCharIndex < charSpans.length) {
                            charSpans[currentCharIndex].classList.remove('correct', 'incorrect');
                        }
                        highlightCurrentChar(currentItem.element);
-                   } else {
-                       // At the beginning of current element, try to go to previous
-                       handleBackspaceBetweenElements();
+                   } else if (currentElementIndex > 0) {
+                       // At the beginning of current element, go to previous element
+                       currentElementIndex--;
+                       const prevItem = typeableElements[currentElementIndex];
+                       // Set cursor at the end of the previous element
+                       currentCharIndex = prevItem.text.length;
+                       
+                       // Mark the current element as not completed
+                       prevItem.element.classList.remove('completed');
+                       prevItem.element.classList.add('current');
+                       
+                       // Update highlighting
+                       highlightCurrentElement();
                    }
                    
-                   // Clear the input field
-                   typingInput.value = '';
+                   // Update stats
+                   updateStats();
                    return;
                }
                
-               // Handle regular typing input
-               const typedChar = e.data;
+               // Skip other special keys
+               if (e.key.length > 1) return;
                
-               // Skip if no character was typed
-               if (typedChar === null) return;
-               
-               // Clear input field for single-character typing
-               typingInput.value = '';
+               // Prevent default behavior to avoid page scrolling, etc.
+               e.preventDefault();
                
                // If we've reached the end of the current element's text
                if (currentCharIndex >= text.length) {
@@ -1157,8 +1276,11 @@
                    return;
                }
                
-               // Get the expected character
+               // Get the expected character and the typed character
                const expectedChar = text[currentCharIndex];
+               const typedChar = e.key;
+               
+               // Get the character spans
                const charSpans = currentItem.element.querySelectorAll('.text-char');
                const currentSpan = charSpans[currentCharIndex];
                
@@ -1168,7 +1290,7 @@
                    // Correct character
                    currentSpan.classList.add('correct');
                    currentCharIndex++;
-                   correctlyTyped++; // Only increment correctly typed for WPM calculation
+                   correctlyTyped++;
                } else {
                    // Incorrect character
                    currentSpan.classList.add('incorrect');
@@ -1195,12 +1317,17 @@
                        
                        // Highlight the next element
                        highlightCurrentElement();
+                       
+                       // Auto-save progress every time we complete an element
+                       if (currentElementIndex % 5 === 0) { // Save every 5 elements
+                           saveProgress(true); // Silent save
+                       }
                    }, 100);
                }
                
                // Update stats
                updateStats();
-           });
+           }
            
            // Update the statistics
            function updateStats() {
@@ -1267,6 +1394,10 @@
                
                // Show the modal
                completionModal.style.display = 'flex';
+               
+               // Clear saved progress
+               localStorage.removeItem(`typecraft-session-${currentFileName}`);
+               checkSavedSessions();
            }
            
            // Reset the typing session
@@ -1290,9 +1421,8 @@
                    });
                });
                
-               // Focus on the input
-               typingInput.value = '';
-               typingInput.focus();
+               // Reset focus
+               documentViewport.focus();
                
                // Reset stats
                wpmValue.textContent = '0';
@@ -1301,6 +1431,191 @@
                
                // Highlight the first element
                highlightCurrentElement();
+           }
+           
+           // Save progress to localStorage
+           function saveProgress(silent = false) {
+               if (!currentFileName) return;
+               
+               // Calculate progress percentage
+               let totalChars = 0;
+               typeableElements.forEach(item => {
+                   totalChars += item.text.length;
+               });
+               
+               let completedChars = 0;
+               for (let i = 0; i < currentElementIndex; i++) {
+                   completedChars += typeableElements[i].text.length;
+               }
+               completedChars += currentCharIndex;
+               
+               const progress = completedChars / totalChars;
+               
+               // Create session data
+               const sessionData = {
+                   fileName: currentFileName,
+                   fileType: fileType,
+                   fileContent: fileContent,
+                   currentElementIndex: currentElementIndex,
+                   currentCharIndex: currentCharIndex,
+                   progress: progress,
+                   timestamp: new Date().toISOString()
+               };
+               
+               // Save to localStorage
+               localStorage.setItem(`typecraft-session-${currentFileName}`, JSON.stringify(sessionData));
+               
+               // Show save indicator if not silent
+               if (!silent) {
+                   saveIndicator.classList.add('visible');
+                   setTimeout(() => {
+                       saveIndicator.classList.remove('visible');
+                   }, 2000);
+               }
+           }
+           
+           // Get all saved sessions
+           function getSavedSessions() {
+               const sessions = [];
+               
+               for (let i = 0; i < localStorage.length; i++) {
+                   const key = localStorage.key(i);
+                   if (key.startsWith('typecraft-session-')) {
+                       try {
+                           const session = JSON.parse(localStorage.getItem(key));
+                           sessions.push(session);
+                       } catch (e) {
+                           console.error('Error parsing saved session:', e);
+                       }
+                   }
+               }
+               
+               // Sort by timestamp (most recent first)
+               return sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+           }
+           
+           // Delete a saved session
+           function deleteSavedSession(fileName) {
+               localStorage.removeItem(`typecraft-session-${fileName}`);
+           }
+           
+           // Flag to track if we're loading a saved session
+           let isLoadingSavedSession = false;
+           
+           // Load a saved session
+           function loadSavedSession(fileName) {
+               const sessionKey = `typecraft-session-${fileName}`;
+               const sessionData = JSON.parse(localStorage.getItem(sessionKey));
+               
+               if (!sessionData) return;
+               
+               // Set the current file name
+               currentFileName = sessionData.fileName;
+               documentTitle.textContent = currentFileName;
+               
+               // Set loading flag
+               isLoadingSavedSession = true;
+               
+               // Show loading indicator
+               loadingIndicator.style.display = 'flex';
+               loadingText.textContent = 'Loading saved session...';
+               
+               // Process file content based on file type
+               if (sessionData.fileType === 'application/pdf' || currentFileName.toLowerCase().endsWith('.pdf')) {
+                   // Create a blob from the stored file content
+                   const blob = new Blob([new Uint8Array(Object.values(sessionData.fileContent))], { type: 'application/pdf' });
+                   const file = new File([blob], currentFileName, { type: 'application/pdf' });
+                   
+                   // Process the PDF
+                   processPdfDocument(file).then(() => {
+                       // Restore typing position
+                       currentElementIndex = sessionData.currentElementIndex;
+                       currentCharIndex = sessionData.currentCharIndex;
+                       
+                       // Highlight correctly typed text
+                       restoreTypingProgress();
+                   });
+               } else if (sessionData.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                         currentFileName.toLowerCase().endsWith('.docx')) {
+                   // Create a blob from the stored file content
+                   const blob = new Blob([new Uint8Array(Object.values(sessionData.fileContent))], 
+                       { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                   const file = new File([blob], currentFileName, 
+                       { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                   
+                   // Process the Word document
+                   processWordDocument(file);
+                   
+                   // Use a timeout to ensure the document is processed before restoring progress
+                   setTimeout(() => {
+                       // Restore typing position
+                       currentElementIndex = sessionData.currentElementIndex;
+                       currentCharIndex = sessionData.currentCharIndex;
+                       
+                       // Highlight correctly typed text
+                       restoreTypingProgress();
+                   }, 1000);
+               } else {
+                   // For text-based files
+                   const blob = new Blob([sessionData.fileContent], { type: 'text/plain' });
+                   const file = new File([blob], currentFileName, { type: 'text/plain' });
+                   
+                   // Process the text document
+                   processTextDocument(file);
+                   
+                   // Use a timeout to ensure the document is processed before restoring progress
+                   setTimeout(() => {
+                       // Restore typing position
+                       currentElementIndex = sessionData.currentElementIndex;
+                       currentCharIndex = sessionData.currentCharIndex;
+                       
+                       // Highlight correctly typed text
+                       restoreTypingProgress();
+                   }, 1000);
+               }
+           }
+           
+           // Restore typing progress after loading a saved session
+           function restoreTypingProgress() {
+               // Mark completed elements
+               for (let i = 0; i < currentElementIndex; i++) {
+                   const item = typeableElements[i];
+                   item.element.classList.add('completed');
+                   
+                   // Mark all characters as correct
+                   const charSpans = item.element.querySelectorAll('.text-char');
+                   charSpans.forEach(span => {
+                       span.classList.add('correct');
+                   });
+               }
+               
+               // Mark partially completed current element
+               if (currentElementIndex < typeableElements.length) {
+                   const currentItem = typeableElements[currentElementIndex];
+                   currentItem.element.classList.add('current');
+                   
+                   // Mark typed characters as correct
+                   const charSpans = currentItem.element.querySelectorAll('.text-char');
+                   for (let i = 0; i < currentCharIndex; i++) {
+                       if (i < charSpans.length) {
+                           charSpans[i].classList.add('correct');
+                       }
+                   }
+               }
+               
+               // Highlight current position
+               highlightCurrentElement();
+               
+               // Hide loading indicator
+               loadingIndicator.style.display = 'none';
+               welcomeScreen.style.display = 'none';
+               typingView.style.display = 'block';
+               
+               // Focus on the document for typing
+               documentViewport.focus();
+               
+               // Update stats
+               updateStats();
            }
        });
    </script>
