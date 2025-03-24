@@ -9,6 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
     <!-- Mammoth.js for DOCX support -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --primary: #6366f1;
@@ -188,6 +190,38 @@
             position: relative;
         }
         
+        /* Pagination controls */
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            background-color: white;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .pagination-controls button {
+            margin: 0 5px;
+            padding: 8px 16px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .pagination-controls button:disabled {
+            background-color: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .pagination-info {
+            margin: 0 15px;
+            font-size: 14px;
+        }
+        
         /* Typing progress bar */
         .typing-progress-bar {
             position: sticky;
@@ -275,6 +309,16 @@
             word-wrap: break-word;
             color: #1e293b;
             letter-spacing: 0.01em;
+        }
+
+        /* Document page styles */
+        .document-page {
+            display: none;
+            margin-bottom: 30px;
+        }
+
+        .document-page.active {
+            display: block;
         }
         
         /* Completion modal */
@@ -429,14 +473,14 @@
             <main>
                 <div class="card">
                     <h2>Get Started</h2>
-                    <p>Upload a document to start practicing your typing skills. Compatible with PDF, Word (DOCX), HTML, and TXT files.</p>
+                    <p>Upload a document to start practicing your typing skills. Compatible with PDF, Word (DOCX), HTML, TXT, and Markdown files.</p>
                     
                     <div class="upload-section" id="dropArea">
                         <div class="upload-icon">📄</div>
                         <p>Drag and drop your document here</p>
                         <p>or</p>
                         <button class="btn" id="uploadBtn">Choose a file</button>
-                        <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.doc,.html,.htm,.rtf">
+                        <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.doc,.html,.htm,.rtf,.md,.markdown">
                         <p class="info-text">Your documents are processed locally - nothing is stored on our servers</p>
                     </div>
                     
@@ -466,6 +510,14 @@
                     <div class="document-viewport" id="documentViewport">
                         <!-- Document content will be rendered here -->
                     </div>
+                </div>
+                
+                <!-- Pagination controls -->
+                <div class="pagination-controls" id="paginationControls">
+                    <button id="prevPageBtn" disabled>Previous Page</button>
+                    <div class="pagination-info">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></div>
+                    <button id="nextPageBtn">Next Page</button>
+                    <button id="skipPageBtn">Skip Page</button>
                 </div>
                 
                 <div class="typing-progress-bar">
@@ -541,6 +593,14 @@
             const resetTypingBtn = document.getElementById('resetTypingBtn');
             const saveProgressBtn = document.getElementById('saveProgressBtn');
             
+            // DOM elements - Pagination controls
+            const paginationControls = document.getElementById('paginationControls');
+            const prevPageBtn = document.getElementById('prevPageBtn');
+            const nextPageBtn = document.getElementById('nextPageBtn');
+            const skipPageBtn = document.getElementById('skipPageBtn');
+            const currentPageEl = document.getElementById('currentPage');
+            const totalPagesEl = document.getElementById('totalPages');
+            
             // DOM elements - Progress indicators
             const wpmValue = document.getElementById('wpmValue');
             const accuracyValue = document.getElementById('accuracyValue');
@@ -572,6 +632,12 @@
             let isTyping = false;
             let fileContent = null; // Store file content for saving progress
             let fileType = ''; // Store file type for saving progress
+            
+            // Pagination variables
+            let documentPages = []; // Array to store pages
+            let currentPageIndex = 0; // Current page index
+            let pageTypeableElements = []; // Typeable elements for current page
+            let totalTypeableElements = []; // All typeable elements across all pages
             
             // Check for saved sessions
             checkSavedSessions();
@@ -641,6 +707,50 @@
                 checkSavedSessions(); // Refresh saved sessions list
             });
             
+            // Pagination event listeners
+            prevPageBtn.addEventListener('click', () => {
+                if (currentPageIndex > 0) {
+                    navigateToPage(currentPageIndex - 1);
+                }
+            });
+            
+            nextPageBtn.addEventListener('click', () => {
+                if (currentPageIndex < documentPages.length - 1) {
+                    navigateToPage(currentPageIndex + 1);
+                }
+            });
+            
+            skipPageBtn.addEventListener('click', () => {
+                if (currentPageIndex < documentPages.length - 1) {
+                    // Mark all elements on current page as completed
+                    pageTypeableElements.forEach(item => {
+                        item.element.classList.add('completed');
+                        
+                        // Mark all characters as correct
+                        const charSpans = item.element.querySelectorAll('.text-char');
+                        charSpans.forEach(span => {
+                            span.classList.add('correct');
+                        });
+                    });
+                    
+                    // Update the total typeable elements progress
+                    const startIndex = getPageStartIndex(currentPageIndex);
+                    const endIndex = getPageEndIndex(currentPageIndex);
+                    
+                    for (let i = startIndex; i <= endIndex; i++) {
+                        if (i < totalTypeableElements.length) {
+                            totalTypeableElements[i].completed = true;
+                        }
+                    }
+                    
+                    // Navigate to next page
+                    navigateToPage(currentPageIndex + 1);
+                    
+                    // Update stats
+                    updateStats();
+                }
+            });
+            
             // Add keyboard event listener for the entire document
             document.addEventListener('keydown', handleKeyDown);
             
@@ -693,10 +803,35 @@
                 }
             }
             
-            // Enhanced text processing function that handles headings better
+            // Text processing functions
+            
+            // Clean up text for better typing experience
+            function cleanText(text) {
+                return text
+                    // Replace multiple spaces with a single space
+                    .replace(/\s+/g, ' ')
+                    // Replace tabs with spaces
+                    .replace(/\t/g, ' ')
+                    // Replace non-breaking spaces with regular spaces
+                    .replace(/\u00A0/g, ' ')
+                    // Replace typographically fancy quotes with straight quotes
+                    .replace(/[\u2018\u2019]/g, "'")
+                    .replace(/[\u201C\u201D]/g, '"')
+                    // Replace em-dashes and en-dashes with hyphens
+                    .replace(/[\u2013\u2014]/g, '-')
+                    // Replace ellipsis with three periods
+                    .replace(/\u2026/g, '...')
+                    // Trim extra whitespace
+                    .trim();
+            }
+            
+            // Enhanced text processing with improved spacing and special character handling
             function processTextContent(text, isHeading = false) {
+                // Apply basic cleaning
+                let processedText = cleanText(text);
+                
                 // Basic spacing fixes for all text
-                let processedText = text
+                processedText = processedText
                     // Add space after punctuation if followed by a capital letter
                     .replace(/([.,!?;:])([A-Z])/g, '$1 $2')
                     // Add space between lowercase and uppercase (camelCase detection)
@@ -722,150 +857,205 @@
                 return processedText;
             }
             
-            // Process the document based on its type
-            function processDocument(file) {
-                // Show loading indicator
-                loadingIndicator.style.display = 'flex';
-                
-                // Set document title
-                documentTitle.textContent = file.name;
-                
-                // Clear previous typeable elements
-                typeableElements = [];
-                
-                fileType = file.type.toLowerCase();
-                const fileName = file.name.toLowerCase();
-                
-                if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-                    loadingText.textContent = 'Processing PDF document...';
-                    processPdfDocument(file);
-                } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
-                          fileName.endsWith('.docx')) {
-                    loadingText.textContent = 'Processing Word document...';
-                    processWordDocument(file);
-                } else if (fileType === 'application/msword' || fileName.endsWith('.doc')) {
-                    loadingText.textContent = 'Processing Word document...';
-                    alert('Classic Word (.doc) files have limited support. For best results, save as .docx or PDF.');
-                    processTextDocument(file); // Fallback to text processing
-                } else if (fileType === 'text/plain' || fileName.endsWith('.txt')) {
-                    loadingText.textContent = 'Processing text document...';
-                    processTextDocument(file);
-                } else if (fileType === 'text/html' || fileName.endsWith('.html') || fileName.endsWith('.htm')) {
-                    loadingText.textContent = 'Processing HTML document...';
-                    processHtmlDocument(file);
-                } else if (fileType === 'application/rtf' || fileName.endsWith('.rtf')) {
-                    loadingText.textContent = 'Processing RTF document...';
-                    processTextDocument(file); // Basic fallback for RTF
-                } else {
-                    alert('Unsupported file type. Please use PDF, DOCX, TXT, HTML, or RTF files.');
-                    loadingIndicator.style.display = 'none';
-                }
+            // Convert Markdown to HTML
+            function processMarkdown(text) {
+                return marked.parse(text);
             }
             
-            // Simplified PDF processing - convert to text instead of overlay
-            async function processPdfDocument(file) {
-                try {
-                    // Read the file content for saving later
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        fileContent = e.target.result;
-                    };
-                    reader.readAsArrayBuffer(file);
-                    
-                    // Create a URL for the PDF
-                    const fileURL = URL.createObjectURL(file);
-                    
-                    // Load the PDF document
-                    const loadingTask = pdfjsLib.getDocument(fileURL);
-                    const pdf = await loadingTask.promise;
-                    
-                    // Create document container
-                    const docContainer = document.createElement('div');
-                    docContainer.className = 'document-text';
-                    
-                    // Process each page
-                    let fullText = '';
-                    
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        loadingText.textContent = `Processing page ${i} of ${pdf.numPages}...`;
-                        
-                        // Get the page
-                        const page = await pdf.getPage(i);
-                        
-                        // Extract text content
-                        const textContent = await page.getTextContent();
-                        
-                        // Fix for the skipped lines issue - we need to track positions better
-                        // Group text items by their vertical position (y-coordinate)
-                        const textByPosition = {};
-                        
-                        textContent.items.forEach(item => {
-                            const y = Math.round(item.transform[5]); // Round to handle minor position differences
-                            if (!textByPosition[y]) {
-                                textByPosition[y] = [];
-                            }
-                            textByPosition[y].push(item);
-                        });
-                        
-                        // Sort positions from top to bottom
-                        const positions = Object.keys(textByPosition).map(Number).sort((a, b) => b - a);
-                        
-                        // Process text line by line
-                        for (const pos of positions) {
-                            // Sort items within a line from left to right
-                            const lineItems = textByPosition[pos].sort((a, b) => a.transform[4] - b.transform[4]);
-                            
-                            // Convert line to text
-                            let line = lineItems.map(item => item.str).join(' ');
-                            
-                            // Check if this is likely a continuation of the previous line
-                            if (line.trim() && !line.trim().endsWith('.') && 
-                                !line.trim().endsWith('?') && !line.trim().endsWith('!') && 
-                                line.length < 50) {
-                                fullText += line + ' ';
-                            } else {
-                                fullText += line + '\n';
-                            }
-                        }
-                        
-                        // Add page break
-                        fullText += '\n\n';
-                    }
-                    
-                    // Process text into structured document with headings detection
-                    const lines = fullText.split('\n');
-                    
-                    // Try to detect headings and paragraphs
-                    for (let i = 0; i < lines.length; i++) {
-                        const line = lines[i].trim();
-                        if (!line) continue;
-                        
-                        // Simple heuristic for headings: shorter lines that are not followed by much text
-                       const isLikelyHeading = line.length < 100 && 
-                                             (!lines[i+1] || !lines[i+1].trim() || lines[i+1].trim().length < line.length) &&
-                                             (line.toUpperCase() === line || /^[A-Z][\w\s]+$/.test(line));
+            // Function to determine if content is likely markdown
+               function isLikelyMarkdown(text) {
+                   // Check for common markdown indicators
+                   return (
+                       /^#+\s/.test(text) || // Headers
+                       /\*\*.*\*\*/.test(text) || // Bold
+                       /\*.*\*/.test(text) || // Italic
+                       /\[.*\]\(.*\)/.test(text) || // Links
+                       /^>\s/.test(text) || // Blockquotes
+                       /^-\s/.test(text) || // Unordered lists
+                       /^[0-9]+\.\s/.test(text) || // Ordered lists
+                       /^```/.test(text) || // Code blocks
+                       /^---/.test(text) // Horizontal rules
+                   );
+               }
+           
+           // Process the document based on its type
+           function processDocument(file) {
+               // Show loading indicator
+               loadingIndicator.style.display = 'flex';
+               
+               // Set document title
+               documentTitle.textContent = file.name;
+               
+               // Clear previous typeable elements
+               typeableElements = [];
+               documentPages = [];
+               totalTypeableElements = [];
+               currentPageIndex = 0;
+               
+               fileType = file.type.toLowerCase();
+               const fileName = file.name.toLowerCase();
+               
+               if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+                   loadingText.textContent = 'Processing PDF document...';
+                   processPdfDocument(file);
+               } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                         fileName.endsWith('.docx')) {
+                   loadingText.textContent = 'Processing Word document...';
+                   processWordDocument(file);
+               } else if (fileType === 'application/msword' || fileName.endsWith('.doc')) {
+                   loadingText.textContent = 'Processing Word document...';
+                   alert('Classic Word (.doc) files have limited support. For best results, save as .docx or PDF.');
+                   processTextDocument(file); // Fallback to text processing
+               } else if (fileType === 'text/plain' || fileName.endsWith('.txt')) {
+                   loadingText.textContent = 'Processing text document...';
+                   processTextDocument(file);
+               } else if (fileType === 'text/html' || fileName.endsWith('.html') || fileName.endsWith('.htm')) {
+                   loadingText.textContent = 'Processing HTML document...';
+                   processHtmlDocument(file);
+               } else if (fileType === 'text/markdown' || fileName.endsWith('.md') || fileName.endsWith('.markdown')) {
+                   loadingText.textContent = 'Processing Markdown document...';
+                   processMarkdownDocument(file);
+               } else if (fileType === 'application/rtf' || fileName.endsWith('.rtf')) {
+                   loadingText.textContent = 'Processing RTF document...';
+                   processTextDocument(file); // Basic fallback for RTF
+               } else {
+                   alert('Unsupported file type. Please use PDF, DOCX, TXT, HTML, Markdown, or RTF files.');
+                   loadingIndicator.style.display = 'none';
+               }
+           }
+           
+           // Process a PDF document with improved text extraction and pagination
+           async function processPdfDocument(file) {
+               try {
+                   // Read the file content for saving later
+                   const reader = new FileReader();
+                   reader.onload = (e) => {
+                       fileContent = e.target.result;
+                   };
+                   reader.readAsArrayBuffer(file);
+                   
+                   // Create a URL for the PDF
+                   const fileURL = URL.createObjectURL(file);
+                   
+                   // Load the PDF document
+                   const loadingTask = pdfjsLib.getDocument(fileURL);
+                   const pdf = await loadingTask.promise;
+                   
+                   // Clear the document viewport
+                   documentViewport.innerHTML = '';
+                   
+                   // Create main container
+                   const mainContainer = document.createElement('div');
+                   mainContainer.className = 'document-text';
+                   documentViewport.appendChild(mainContainer);
+                   
+                   // Process each page
+                   const MAX_ELEMENTS_PER_PAGE = 20; // Limit elements per page to prevent performance issues
+                   let currentPageContainer = null;
+                   let currentPageElements = [];
+                   let pageIndex = 0;
+                   
+                   // Update loading text to show progress
+                   const totalPages = pdf.numPages;
+                   
+                   for (let i = 1; i <= totalPages; i++) {
+                       loadingText.textContent = `Processing page ${i} of ${totalPages}...`;
                        
-                       if (isLikelyHeading) {
-                           // Create heading element
-                           const headingLevel = line.length < 30 ? 'h2' : 'h3';
-                           const heading = document.createElement(headingLevel);
-                           // Process heading text to fix spacing issues
-                           heading.textContent = processTextContent(line, true);
-                           docContainer.appendChild(heading);
-                       } else {
-                           // Create paragraph element
+                       // Get the page
+                       const page = await pdf.getPage(i);
+                       
+                       // Extract text content
+                       const textContent = await page.getTextContent();
+                       
+                       // Create a new page container if needed
+                       if (!currentPageContainer || currentPageElements.length >= MAX_ELEMENTS_PER_PAGE) {
+                           currentPageContainer = document.createElement('div');
+                           currentPageContainer.className = 'document-page';
+                           currentPageContainer.dataset.pageIndex = pageIndex;
+                           mainContainer.appendChild(currentPageContainer);
+                           
+                           documentPages.push(currentPageContainer);
+                           currentPageElements = [];
+                           pageIndex++;
+                       }
+                       
+                       // Add a page header
+                       const pageHeader = document.createElement('h3');
+                       pageHeader.textContent = `Page ${i} of ${totalPages}`;
+                       pageHeader.style.color = '#64748b';
+                       pageHeader.style.marginBottom = '20px';
+                       currentPageContainer.appendChild(pageHeader);
+                       
+                       // Improved text extraction with better position tracking
+                       // Group text items by their vertical position (y-coordinate)
+                       const textByPosition = {};
+                       
+                       textContent.items.forEach(item => {
+                           const y = Math.round(item.transform[5]); // Round to handle minor position differences
+                           if (!textByPosition[y]) {
+                               textByPosition[y] = [];
+                           }
+                           textByPosition[y].push(item);
+                       });
+                       
+                       // Sort positions from top to bottom
+                       const positions = Object.keys(textByPosition).map(Number).sort((a, b) => b - a);
+                       
+                       // Process text line by line
+                       let paragraphText = '';
+                       let lastPosition = null;
+                       
+                       for (const pos of positions) {
+                           // Sort items within a line from left to right
+                           const lineItems = textByPosition[pos].sort((a, b) => a.transform[4] - b.transform[4]);
+                           
+                           // Convert line to text
+                           let line = lineItems.map(item => item.str).join(' ');
+                           line = cleanText(line);
+                           
+                           // Check if this is likely a header (short line, all caps, etc.)
+                           const isLikelyHeading = line.trim().length < 100 && 
+                                                (line.toUpperCase() === line || 
+                                                 /^[A-Z][\w\s]+$/.test(line));
+                           
+                           // If it's likely a heading or if there's a big gap, create a new paragraph
+                           if (isLikelyHeading || (lastPosition && Math.abs(pos - lastPosition) > 15)) {
+                               // Create paragraph from accumulated text
+                               if (paragraphText.trim()) {
+                                   const para = document.createElement('p');
+                                   para.textContent = processTextContent(paragraphText);
+                                   currentPageContainer.appendChild(para);
+                                   currentPageElements.push(para);
+                               }
+                               
+                               paragraphText = '';
+                               
+                               // Create heading if needed
+                               if (isLikelyHeading) {
+                                   const heading = document.createElement(line.length < 30 ? 'h2' : 'h3');
+                                   heading.textContent = processTextContent(line, true);
+                                   currentPageContainer.appendChild(heading);
+                                   currentPageElements.push(heading);
+                                   continue; // Skip adding to paragraph text
+                               }
+                           }
+                           
+                           // Add to paragraph text
+                           paragraphText += line + ' ';
+                           lastPosition = pos;
+                       }
+                       
+                       // Add final paragraph
+                       if (paragraphText.trim()) {
                            const para = document.createElement('p');
-                           para.textContent = processTextContent(line);
-                           docContainer.appendChild(para);
+                           para.textContent = processTextContent(paragraphText);
+                           currentPageContainer.appendChild(para);
+                           currentPageElements.push(para);
                        }
                    }
                    
-                   // Clear viewport and add the document
-                   documentViewport.innerHTML = '';
-                   documentViewport.appendChild(docContainer);
-                   
-                   // Extract typeable elements
-                   extractTypeableElementsFromDoc(docContainer);
+                   // Set up document pagination
+                   setupPagination();
                    
                    // Hide loading indicator and show typing view
                    loadingIndicator.style.display = 'none';
@@ -882,7 +1072,7 @@
                }
            }
            
-           // Process a Word document using Mammoth.js
+           // Process a Word document using Mammoth.js with pagination
            function processWordDocument(file) {
                const reader = new FileReader();
                
@@ -894,25 +1084,35 @@
                    
                    mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
                        .then(result => {
-                           // Create document container
-                           const docContainer = document.createElement('div');
-                           docContainer.className = 'document-text';
+                           // Create main container
+                           const mainContainer = document.createElement('div');
+                           mainContainer.className = 'document-text';
                            
                            // Set the HTML content
-                           docContainer.innerHTML = result.value;
+                           const tempContainer = document.createElement('div');
+                           tempContainer.innerHTML = result.value;
                            
                            // Process headings to fix spacing issues
-                           const headings = docContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                           const headings = tempContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
                            headings.forEach(heading => {
                                heading.textContent = processTextContent(heading.textContent, true);
                            });
                            
+                           // Process paragraphs for better spacing
+                           const paragraphs = tempContainer.querySelectorAll('p');
+                           paragraphs.forEach(para => {
+                               para.textContent = processTextContent(para.textContent);
+                           });
+                           
+                           // Create pages
+                           createPagesFromElements(tempContainer, mainContainer);
+                           
                            // Clear viewport and add the document
                            documentViewport.innerHTML = '';
-                           documentViewport.appendChild(docContainer);
+                           documentViewport.appendChild(mainContainer);
                            
-                           // Extract typeable elements
-                           extractTypeableElementsFromDoc(docContainer);
+                           // Set up document pagination
+                           setupPagination();
                            
                            // Hide loading indicator and show typing view
                            loadingIndicator.style.display = 'none';
@@ -937,7 +1137,7 @@
                reader.readAsArrayBuffer(file);
            }
            
-           // Process a text document
+           // Process a text document with pagination
            function processTextDocument(file) {
                const reader = new FileReader();
                
@@ -947,22 +1147,71 @@
                    
                    const text = e.target.result;
                    
-                   // Create document container
-                   const docContainer = document.createElement('div');
-                   docContainer.className = 'document-text';
+                   // Check if it might be markdown
+                   if (isLikelyMarkdown(text)) {
+                       // Process as markdown
+                       const html = processMarkdown(text);
+                       const tempContainer = document.createElement('div');
+                       tempContainer.innerHTML = html;
+                       
+                       // Create main container
+                       const mainContainer = document.createElement('div');
+                       mainContainer.className = 'document-text';
+                       
+                       // Create pages
+                       createPagesFromElements(tempContainer, mainContainer);
+                       
+                       // Clear viewport and add the document
+                       documentViewport.innerHTML = '';
+                       documentViewport.appendChild(mainContainer);
+                       
+                       // Set up document pagination
+                       setupPagination();
+                       
+                       // Hide loading indicator and show typing view
+                       loadingIndicator.style.display = 'none';
+                       welcomeScreen.style.display = 'none';
+                       typingView.style.display = 'block';
+                       
+                       // Initialize the typing session
+                       initializeTypingSession();
+                       return;
+                   }
+                   
+                   // Create main container
+                   const mainContainer = document.createElement('div');
+                   mainContainer.className = 'document-text';
                    
                    // Split text into paragraphs
                    const paragraphs = text.split(/\n\s*\n/);
                    
+                   // Create pages
+                   const MAX_PARAGRAPHS_PER_PAGE = 15;
+                   let currentPageContainer = null;
+                   let currentPageElements = [];
+                   let pageIndex = 0;
+                   
                    // Process each paragraph
-                   paragraphs.forEach(paragraph => {
+                   paragraphs.forEach((paragraph, index) => {
                        if (!paragraph.trim()) return;
+                       
+                       // Create a new page container if needed
+                       if (!currentPageContainer || currentPageElements.length >= MAX_PARAGRAPHS_PER_PAGE) {
+                           currentPageContainer = document.createElement('div');
+                           currentPageContainer.className = 'document-page';
+                           currentPageContainer.dataset.pageIndex = pageIndex;
+                           mainContainer.appendChild(currentPageContainer);
+                           
+                           documentPages.push(currentPageContainer);
+                           currentPageElements = [];
+                           pageIndex++;
+                       }
                        
                        // Check if this is likely a heading (short line, all caps, etc.)
                        const isLikelyHeading = paragraph.trim().length < 100 && 
-                                             (paragraph.toUpperCase() === paragraph || 
-                                              /^#+ /.test(paragraph) || 
-                                              /^[A-Z][\w\s]+$/.test(paragraph));
+                                            (paragraph.toUpperCase() === paragraph || 
+                                             /^#+ /.test(paragraph) || 
+                                             /^[A-Z][\w\s]+$/.test(paragraph));
                        
                        // Create appropriate element based on content
                        if (isLikelyHeading) {
@@ -971,7 +1220,8 @@
                            const heading = document.createElement(headingLevel);
                            // Apply enhanced text processing for headings
                            heading.textContent = processTextContent(paragraph, true);
-                           docContainer.appendChild(heading);
+                           currentPageContainer.appendChild(heading);
+                           currentPageElements.push(heading);
                        } else {
                            // Create paragraph element
                            const para = document.createElement('p');
@@ -983,16 +1233,17 @@
                            para.textContent = processTextContent(paragraph, false);
                            
                            // Add to document
-                           docContainer.appendChild(para);
+                           currentPageContainer.appendChild(para);
+                           currentPageElements.push(para);
                        }
                    });
                    
                    // Clear viewport and add the document
                    documentViewport.innerHTML = '';
-                   documentViewport.appendChild(docContainer);
+                   documentViewport.appendChild(mainContainer);
                    
-                   // Extract typeable elements
-                   extractTypeableElementsFromDoc(docContainer);
+                   // Set up document pagination
+                   setupPagination();
                    
                    // Hide loading indicator and show typing view
                    loadingIndicator.style.display = 'none';
@@ -1011,7 +1262,7 @@
                reader.readAsText(file);
            }
            
-           // Process an HTML document
+           // Process an HTML document with pagination
            function processHtmlDocument(file) {
                const reader = new FileReader();
                
@@ -1021,9 +1272,8 @@
                    
                    const htmlContent = e.target.result;
                    
-                   // Create document container
-                   const docContainer = document.createElement('div');
-                   docContainer.className = 'document-text';
+                   // Create a temporary container for the HTML content
+                   const tempContainer = document.createElement('div');
                    
                    // Set the HTML content with some sanitization
                    // Remove scripts and potentially harmful elements
@@ -1031,20 +1281,27 @@
                        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
                        .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
                        
-                   docContainer.innerHTML = sanitizedHtml;
+                   tempContainer.innerHTML = sanitizedHtml;
                    
                    // Process headings to fix spacing issues
-                   const headings = docContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                   const headings = tempContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
                    headings.forEach(heading => {
                        heading.textContent = processTextContent(heading.textContent, true);
                    });
                    
+                   // Create main container
+                   const mainContainer = document.createElement('div');
+                   mainContainer.className = 'document-text';
+                   
+                   // Create pages
+                   createPagesFromElements(tempContainer, mainContainer);
+                   
                    // Clear viewport and add the document
                    documentViewport.innerHTML = '';
-                   documentViewport.appendChild(docContainer);
+                   documentViewport.appendChild(mainContainer);
                    
-                   // Extract typeable elements
-                   extractTypeableElementsFromDoc(docContainer);
+                   // Set up document pagination
+                   setupPagination();
                    
                    // Hide loading indicator and show typing view
                    loadingIndicator.style.display = 'none';
@@ -1063,13 +1320,186 @@
                reader.readAsText(file);
            }
            
-           // Extract typeable elements from document container
-           function extractTypeableElementsFromDoc(container) {
-               // Clear previous typeable elements
-               typeableElements = [];
+           // Process a Markdown document
+           function processMarkdownDocument(file) {
+               const reader = new FileReader();
+               
+               reader.onload = function(e) {
+                   // Save the file content for later
+                   fileContent = e.target.result;
+                   
+                   const markdownContent = e.target.result;
+                   
+                   // Convert Markdown to HTML
+                   const html = processMarkdown(markdownContent);
+                   
+                   // Create a temporary container
+                   const tempContainer = document.createElement('div');
+                   tempContainer.innerHTML = html;
+                   
+                   // Process headings to fix spacing issues
+                   const headings = tempContainer.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                   headings.forEach(heading => {
+                       heading.textContent = processTextContent(heading.textContent, true);
+                   });
+                   
+                   // Create main container
+                   const mainContainer = document.createElement('div');
+                   mainContainer.className = 'document-text';
+                   
+                   // Create pages
+                   createPagesFromElements(tempContainer, mainContainer);
+                   
+                   // Clear viewport and add the document
+                   documentViewport.innerHTML = '';
+                   documentViewport.appendChild(mainContainer);
+                   
+                   // Set up document pagination
+                   setupPagination();
+                   
+                   // Hide loading indicator and show typing view
+                   loadingIndicator.style.display = 'none';
+                   welcomeScreen.style.display = 'none';
+                   typingView.style.display = 'block';
+                   
+                   // Initialize the typing session
+                   initializeTypingSession();
+               };
+               
+               reader.onerror = function() {
+                   alert('There was an error reading the Markdown file. Please try again.');
+                   loadingIndicator.style.display = 'none';
+               };
+               
+               reader.readAsText(file);
+           }
+           
+           // Create pages from a container of elements
+           function createPagesFromElements(sourceContainer, targetContainer) {
+               // Get all relevant text elements
+               const elements = sourceContainer.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table');
+               
+               // Constants for pagination
+               const MAX_ELEMENTS_PER_PAGE = 15;
+               let currentPageContainer = null;
+               let currentPageElements = [];
+               let pageIndex = 0;
+               
+               // Process each element
+               elements.forEach((element, index) => {
+                   // Skip empty elements
+                   if (!element.textContent.trim()) return;
+                   
+                   // Create a new page container if needed
+                   if (!currentPageContainer || currentPageElements.length >= MAX_ELEMENTS_PER_PAGE) {
+                       currentPageContainer = document.createElement('div');
+                       currentPageContainer.className = 'document-page';
+                       currentPageContainer.dataset.pageIndex = pageIndex;
+                       targetContainer.appendChild(currentPageContainer);
+                       
+                       documentPages.push(currentPageContainer);
+                       currentPageElements = [];
+                       pageIndex++;
+                       
+                       // Add page number as a header
+                       const pageHeader = document.createElement('h3');
+                       pageHeader.textContent = `Page ${pageIndex} of ${Math.ceil(elements.length / MAX_ELEMENTS_PER_PAGE)}`;
+                       pageHeader.style.color = '#64748b';
+                       pageHeader.style.marginBottom = '20px';
+                       currentPageContainer.appendChild(pageHeader);
+                   }
+                   
+                   // Clone the element and add to the current page
+                   const clonedElement = element.cloneNode(true);
+                   currentPageContainer.appendChild(clonedElement);
+                   currentPageElements.push(clonedElement);
+               });
+           }
+           
+           // Set up pagination controls
+           function setupPagination() {
+               // Update total pages count
+               totalPagesEl.textContent = documentPages.length;
+               currentPageEl.textContent = '1';
+               
+               // Show the first page
+               if (documentPages.length > 0) {
+                   documentPages.forEach(page => {
+                       page.classList.remove('active');
+                   });
+                   documentPages[0].classList.add('active');
+               }
+               
+               // Update pagination button states
+               updatePaginationButtons();
+               
+               // Show pagination controls if there are multiple pages
+               if (documentPages.length > 1) {
+                   paginationControls.style.display = 'flex';
+               } else {
+                   paginationControls.style.display = 'none';
+               }
+           }
+           
+           // Update pagination button states
+           function updatePaginationButtons() {
+               prevPageBtn.disabled = currentPageIndex === 0;
+               nextPageBtn.disabled = currentPageIndex === documentPages.length - 1;
+           }
+           
+           // Navigate to a specific page
+           function navigateToPage(pageIndex) {
+               if (pageIndex < 0 || pageIndex >= documentPages.length) return;
+               
+               // Update current page index
+               currentPageIndex = pageIndex;
+               
+               // Hide all pages except the current one
+               documentPages.forEach((page, index) => {
+                   if (index === currentPageIndex) {
+                       page.classList.add('active');
+                   } else {
+                       page.classList.remove('active');
+                   }
+               });
+               
+               // Update pagination info
+               currentPageEl.textContent = currentPageIndex + 1;
+               
+               // Update pagination buttons
+               updatePaginationButtons();
+               
+               // Extract typeable elements for current page
+               extractTypeableElementsFromPage(documentPages[currentPageIndex]);
+               
+               // Reset typing session for this page
+               resetPageTypingSession();
+           }
+           
+           // Get the start index for typeable elements on a page
+           function getPageStartIndex(pageIndex) {
+               let startIndex = 0;
+               for (let i = 0; i < pageIndex; i++) {
+                   const pageElements = documentPages[i].querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
+                   startIndex += pageElements.length;
+               }
+               return startIndex;
+           }
+           
+           // Get the end index for typeable elements on a page
+           function getPageEndIndex(pageIndex) {
+               const startIndex = getPageStartIndex(pageIndex);
+               const pageElements = documentPages[pageIndex].querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
+               return startIndex + pageElements.length - 1;
+           }
+           
+           // Extract typeable elements from a specific page
+           function extractTypeableElementsFromPage(pageContainer) {
+               // Clear previous page typeable elements
+               pageTypeableElements = [];
                
                // Get all text nodes that should be typeable
-               const textElements = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
+               const textElements = pageContainer.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote, pre');
                
                textElements.forEach(element => {
                    // Skip elements with no text
@@ -1082,7 +1512,7 @@
                    let wrapper = element.querySelector('.typeable-wrapper');
                    if (!wrapper) {
                        // Save the original text
-                       const originalText = element.textContent;
+                       const originalText = cleanText(element.textContent);
                        
                        // Create a wrapper
                        wrapper = document.createElement('div');
@@ -1105,11 +1535,75 @@
                    }
                    
                    // Add to typeable elements
-                   typeableElements.push({
+                   const textItem = {
                        element: wrapper,
                        text: wrapper.dataset.text,
-                       index: typeableElements.length,
-                       isHeading: isHeading
+                       index: pageTypeableElements.length,
+                       isHeading: isHeading,
+                       completed: false
+                   };
+                   
+                   pageTypeableElements.push(textItem);
+                   
+                   // Add to total typeable elements
+                   totalTypeableElements.push(textItem);
+               });
+               
+               // Reset element index for the current page
+               currentElementIndex = 0;
+               currentCharIndex = 0;
+           }
+           
+           // Extract typeable elements from all pages
+           function extractTypeableElementsFromDoc(container) {
+               // Clear previous typeable elements
+               totalTypeableElements = [];
+               
+               // Process each page
+               documentPages.forEach((page) => {
+                   const textElements = page.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote, pre');
+                   
+                   textElements.forEach(element => {
+                       // Skip elements with no text
+                       if (!element.textContent.trim()) return;
+                       
+                       // Check if this is a heading
+                       const isHeading = /^h[1-6]$/i.test(element.tagName);
+                       
+                       // Create a wrapper for this element if it doesn't exist
+                       let wrapper = element.querySelector('.typeable-wrapper');
+                       if (!wrapper) {
+                           // Save the original text
+                           const originalText = cleanText(element.textContent);
+                           
+                           // Create a wrapper
+                           wrapper = document.createElement('div');
+                           wrapper.className = 'typeable-wrapper';
+                           wrapper.dataset.text = originalText;
+                           wrapper.tabIndex = 0; // Make it focusable
+                           
+                           // Replace the element's content with the wrapper
+                           element.innerHTML = '';
+                           element.appendChild(wrapper);
+                           
+                           // Create spans for each character
+                           for (let i = 0; i < originalText.length; i++) {
+                               const charSpan = document.createElement('span');
+                               charSpan.className = 'text-char';
+                               charSpan.textContent = originalText[i];
+                               charSpan.dataset.index = i;
+                               wrapper.appendChild(charSpan);
+                           }
+                       }
+                       
+                       // Add to total typeable elements
+                       totalTypeableElements.push({
+                           element: wrapper,
+                           text: wrapper.dataset.text,
+                           index: totalTypeableElements.length,
+                           isHeading: isHeading,
+                           completed: false
+                       });
                    });
                });
            }
@@ -1135,31 +1629,71 @@
                accuracyValue.textContent = '0%';
                progressValue.textContent = '0%';
                
-               // Highlight the current element
-               highlightCurrentElement();
+               // Setup the first page
+               if (documentPages.length > 0) {
+                   navigateToPage(0);
+               }
                
                // Set focus to the document for typing
                documentViewport.focus();
            }
            
+           // Reset typing session for current page
+           function resetPageTypingSession() {
+               // Only reset current page elements
+               if (pageTypeableElements.length > 0) {
+                   currentElementIndex = 0;
+                   currentCharIndex = 0;
+                   
+                   // Reset text document elements on current page
+                   const wrappers = documentPages[currentPageIndex].querySelectorAll('.typeable-wrapper');
+                   wrappers.forEach(wrapper => {
+                       const isCompleted = wrapper.classList.contains('completed');
+                       wrapper.classList.remove('current', 'completed');
+                       
+                       // Reset character spans
+                       wrapper.querySelectorAll('.text-char').forEach(charSpan => {
+                           charSpan.classList.remove('current', 'correct', 'incorrect');
+                       });
+                       
+                       // Restore completed state if it was already completed
+                       if (isCompleted) {
+                           wrapper.classList.add('completed');
+                           wrapper.querySelectorAll('.text-char').forEach(charSpan => {
+                               charSpan.classList.add('correct');
+                           });
+                       }
+                   });
+                   
+                   // Highlight the first element
+                   highlightCurrentElement();
+               }
+           }
+           
            // Highlight the current typeable element
            function highlightCurrentElement() {
                // If we have no typeable elements, return
-               if (typeableElements.length === 0) return;
+               if (pageTypeableElements.length === 0) return;
                
-               // If we've reached the end, show completion
-               if (currentElementIndex >= typeableElements.length) {
-                   showCompletionModal();
+               // If we've reached the end of current page
+               if (currentElementIndex >= pageTypeableElements.length) {
+                   // Check if there are more pages
+                   if (currentPageIndex < documentPages.length - 1) {
+                       // Move to the next page
+                       navigateToPage(currentPageIndex + 1);
+                   } else {
+                       // We've reached the end of the document
+                       showCompletionModal();
+                   }
                    return;
                }
                
                // Get the current element
-               const currentItem = typeableElements[currentElementIndex];
+               const currentItem = pageTypeableElements[currentElementIndex];
                
-               // Remove current class from all wrappers
-               document.querySelectorAll('.typeable-wrapper').forEach(wrapper => {
+               // Remove current class from all wrappers on this page
+               documentPages[currentPageIndex].querySelectorAll('.typeable-wrapper').forEach(wrapper => {
                    wrapper.classList.remove('current');
-                   wrapper.classList.remove('completed');
                });
                
                // Add current class to this wrapper
@@ -1175,7 +1709,7 @@
            // Highlight the current character
            function highlightCurrentChar(element) {
                // Get the current element
-               const currentItem = typeableElements[currentElementIndex];
+               const currentItem = pageTypeableElements[currentElementIndex];
                if (!currentItem || !currentItem.element) return;
                
                // Get all character spans
@@ -1205,8 +1739,11 @@
                // Only handle typing when the typing view is shown
                if (typingView.style.display !== 'block') return;
                
-               // Skip if we've reached the end
-               if (currentElementIndex >= typeableElements.length) return;
+               // Skip if we've reached the end of all pages
+               if (currentPageIndex >= documentPages.length) return;
+               
+               // Skip if we've reached the end of current page elements
+               if (currentElementIndex >= pageTypeableElements.length) return;
                
                // Skip control keys except Backspace
                if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -1218,7 +1755,7 @@
                }
                
                // Get the current element and its text
-               const currentItem = typeableElements[currentElementIndex];
+               const currentItem = pageTypeableElements[currentElementIndex];
                const text = currentItem.text;
                
                // Handle Backspace key
@@ -1239,7 +1776,7 @@
                    } else if (currentElementIndex > 0) {
                        // At the beginning of current element, go to previous element
                        currentElementIndex--;
-                       const prevItem = typeableElements[currentElementIndex];
+                       const prevItem = pageTypeableElements[currentElementIndex];
                        // Set cursor at the end of the previous element
                        currentCharIndex = prevItem.text.length;
                        
@@ -1267,6 +1804,17 @@
                    // Move to the next element
                    currentElementIndex++;
                    currentCharIndex = 0;
+                   
+                   // Mark the current element as completed
+                   currentItem.element.classList.remove('current');
+                   currentItem.element.classList.add('completed');
+                   currentItem.completed = true;
+                   
+                   // Update the corresponding element in totalTypeableElements
+                   const globalIndex = getPageStartIndex(currentPageIndex) + currentElementIndex - 1;
+                   if (globalIndex >= 0 && globalIndex < totalTypeableElements.length) {
+                       totalTypeableElements[globalIndex].completed = true;
+                   }
                    
                    // Update stats
                    updateStats();
@@ -1311,6 +1859,13 @@
                        // Mark the current element as completed
                        currentItem.element.classList.remove('current');
                        currentItem.element.classList.add('completed');
+                       currentItem.completed = true;
+                       
+                       // Update the corresponding element in totalTypeableElements
+                       const globalIndex = getPageStartIndex(currentPageIndex) + currentElementIndex - 1;
+                       if (globalIndex >= 0 && globalIndex < totalTypeableElements.length) {
+                           totalTypeableElements[globalIndex].completed = true;
+                       }
                        
                        // Update stats
                        updateStats();
@@ -1339,7 +1894,7 @@
                
                // Calculate total characters in all typeable elements
                let totalChars = 0;
-               typeableElements.forEach(item => {
+               totalTypeableElements.forEach(item => {
                    totalChars += item.text.length;
                });
                
@@ -1350,14 +1905,25 @@
                // Calculate accuracy
                const accuracy = totalTyped > 0 ? Math.round(((totalTyped - errors) / totalTyped) * 100) : 100;
                
-               // Calculate progress
+               // Calculate overall progress
                let completedChars = 0;
-               for (let i = 0; i < currentElementIndex; i++) {
-                   completedChars += typeableElements[i].text.length;
-               }
-               completedChars += currentCharIndex;
+               let totalCharsInDocument = 0;
                
-               const progress = Math.round((completedChars / totalChars) * 100) || 0;
+               // Count completed characters based on totalTypeableElements
+               totalTypeableElements.forEach(item => {
+                   totalCharsInDocument += item.text.length;
+                   
+                   if (item.completed) {
+                       completedChars += item.text.length;
+                   }
+               });
+               
+               // Add characters typed in current element
+               if (currentElementIndex < pageTypeableElements.length) {
+                   completedChars += currentCharIndex;
+               }
+               
+               const progress = Math.round((completedChars / totalCharsInDocument) * 100) || 0;
                
                // Update UI
                wpmValue.textContent = wpm;
@@ -1375,7 +1941,7 @@
                
                // Calculate total characters in all typeable elements
                let totalChars = 0;
-               typeableElements.forEach(item => {
+               totalTypeableElements.forEach(item => {
                    totalChars += item.text.length;
                });
                
@@ -1411,15 +1977,26 @@
                correctlyTyped = 0;
                isTyping = false;
                
-               // Reset text document elements
-               document.querySelectorAll('.typeable-wrapper').forEach(wrapper => {
-                   wrapper.classList.remove('current', 'completed');
-                   
-                   // Reset character spans
-                   wrapper.querySelectorAll('.text-char').forEach(charSpan => {
-                       charSpan.classList.remove('current', 'correct', 'incorrect');
+               // Reset all document pages
+               documentPages.forEach((page, pageIndex) => {
+                   // Reset text document elements
+                   page.querySelectorAll('.typeable-wrapper').forEach(wrapper => {
+                       wrapper.classList.remove('current', 'completed');
+                       
+                       // Reset character spans
+                       wrapper.querySelectorAll('.text-char').forEach(charSpan => {
+                           charSpan.classList.remove('current', 'correct', 'incorrect');
+                       });
                    });
                });
+               
+               // Reset completed state for all totalTypeableElements
+               totalTypeableElements.forEach(item => {
+                   item.completed = false;
+               });
+               
+               // Return to the first page
+               navigateToPage(0);
                
                // Reset focus
                documentViewport.focus();
@@ -1428,9 +2005,6 @@
                wpmValue.textContent = '0';
                accuracyValue.textContent = '0%';
                progressValue.textContent = '0%';
-               
-               // Highlight the first element
-               highlightCurrentElement();
            }
            
            // Save progress to localStorage
@@ -1438,26 +2012,34 @@
                if (!currentFileName) return;
                
                // Calculate progress percentage
-               let totalChars = 0;
-               typeableElements.forEach(item => {
-                   totalChars += item.text.length;
+               let completedChars = 0;
+               let totalCharsInDocument = 0;
+               
+               // Count completed characters based on totalTypeableElements
+               totalTypeableElements.forEach(item => {
+                   totalCharsInDocument += item.text.length;
+                   
+                   if (item.completed) {
+                       completedChars += item.text.length;
+                   }
                });
                
-               let completedChars = 0;
-               for (let i = 0; i < currentElementIndex; i++) {
-                   completedChars += typeableElements[i].text.length;
+               // Add characters typed in current element
+               if (currentElementIndex < pageTypeableElements.length) {
+                   completedChars += currentCharIndex;
                }
-               completedChars += currentCharIndex;
                
-               const progress = completedChars / totalChars;
+               const progress = completedChars / totalCharsInDocument;
                
                // Create session data
                const sessionData = {
                    fileName: currentFileName,
                    fileType: fileType,
                    fileContent: fileContent,
+                   currentPageIndex: currentPageIndex,
                    currentElementIndex: currentElementIndex,
                    currentCharIndex: currentCharIndex,
+                   completedElements: totalTypeableElements.map(item => item.completed),
                    progress: progress,
                    timestamp: new Date().toISOString()
                };
@@ -1528,15 +2110,13 @@
                    
                    // Process the PDF
                    processPdfDocument(file).then(() => {
-                       // Restore typing position
-                       currentElementIndex = sessionData.currentElementIndex;
-                       currentCharIndex = sessionData.currentCharIndex;
-                       
-                       // Highlight correctly typed text
-                       restoreTypingProgress();
+                       // Restore session state
+                       setTimeout(() => {
+                           restoreTypingProgress(sessionData);
+                       }, 1000);
                    });
                } else if (sessionData.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
-                         currentFileName.toLowerCase().endsWith('.docx')) {
+                        currentFileName.toLowerCase().endsWith('.docx')) {
                    // Create a blob from the stored file content
                    const blob = new Blob([new Uint8Array(Object.values(sessionData.fileContent))], 
                        { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -1548,12 +2128,7 @@
                    
                    // Use a timeout to ensure the document is processed before restoring progress
                    setTimeout(() => {
-                       // Restore typing position
-                       currentElementIndex = sessionData.currentElementIndex;
-                       currentCharIndex = sessionData.currentCharIndex;
-                       
-                       // Highlight correctly typed text
-                       restoreTypingProgress();
+                       restoreTypingProgress(sessionData);
                    }, 1000);
                } else {
                    // For text-based files
@@ -1565,40 +2140,84 @@
                    
                    // Use a timeout to ensure the document is processed before restoring progress
                    setTimeout(() => {
-                       // Restore typing position
-                       currentElementIndex = sessionData.currentElementIndex;
-                       currentCharIndex = sessionData.currentCharIndex;
-                       
-                       // Highlight correctly typed text
-                       restoreTypingProgress();
+                       restoreTypingProgress(sessionData);
                    }, 1000);
                }
            }
            
            // Restore typing progress after loading a saved session
-           function restoreTypingProgress() {
-               // Mark completed elements
-               for (let i = 0; i < currentElementIndex; i++) {
-                   const item = typeableElements[i];
-                   item.element.classList.add('completed');
-                   
-                   // Mark all characters as correct
-                   const charSpans = item.element.querySelectorAll('.text-char');
-                   charSpans.forEach(span => {
-                       span.classList.add('correct');
-                   });
+           function restoreTypingProgress(sessionData) {
+               // Navigate to the saved page
+               if (sessionData.currentPageIndex < documentPages.length) {
+                   navigateToPage(sessionData.currentPageIndex);
                }
                
-               // Mark partially completed current element
-               if (currentElementIndex < typeableElements.length) {
-                   const currentItem = typeableElements[currentElementIndex];
-                   currentItem.element.classList.add('current');
+               // Restore completed elements
+               if (sessionData.completedElements && sessionData.completedElements.length > 0) {
+                   // Update completedElements in totalTypeableElements
+                   for (let i = 0; i < Math.min(sessionData.completedElements.length, totalTypeableElements.length); i++) {
+                       totalTypeableElements[i].completed = sessionData.completedElements[i];
+                       
+                       if (sessionData.completedElements[i]) {
+                           // Find the element in the DOM and mark it as completed
+                           const element = totalTypeableElements[i].element;
+                           element.classList.add('completed');
+                           
+                           // Mark all characters as correct
+                           const charSpans = element.querySelectorAll('.text-char');
+                           charSpans.forEach(span => {
+                               span.classList.add('correct');
+                           });
+                       }
+                   }
+               } else {
+                   // Fallback for older saved sessions without completedElements
                    
-                   // Mark typed characters as correct
-                   const charSpans = currentItem.element.querySelectorAll('.text-char');
-                   for (let i = 0; i < currentCharIndex; i++) {
-                       if (i < charSpans.length) {
-                           charSpans[i].classList.add('correct');
+                   // Mark completed elements on previous pages
+                   for (let i = 0; i < sessionData.currentPageIndex; i++) {
+                       const pageElements = documentPages[i].querySelectorAll('.typeable-wrapper');
+                       pageElements.forEach(element => {
+                           element.classList.add('completed');
+                           
+                           // Mark all characters as correct
+                           const charSpans = element.querySelectorAll('.text-char');
+                           charSpans.forEach(span => {
+                               span.classList.add('correct');
+                           });
+                       });
+                   }
+                   
+                   // Mark completed elements on current page
+                   const pageElements = Array.from(documentPages[sessionData.currentPageIndex].querySelectorAll('.typeable-wrapper'));
+                   for (let i = 0; i < sessionData.currentElementIndex; i++) {
+                       if (i < pageElements.length) {
+                           pageElements[i].classList.add('completed');
+                           
+                           // Mark all characters as correct
+                           const charSpans = pageElements[i].querySelectorAll('.text-char');
+                           charSpans.forEach(span => {
+                               span.classList.add('correct');
+                           });
+                       }
+                   }
+               }
+               
+               // Restore position within current element
+               if (sessionData.currentElementIndex < pageTypeableElements.length) {
+                   currentElementIndex = sessionData.currentElementIndex;
+                   currentCharIndex = sessionData.currentCharIndex;
+                   
+                   // Mark current element as current
+                   const currentItem = pageTypeableElements[currentElementIndex];
+                   if (currentItem) {
+                       currentItem.element.classList.add('current');
+                       
+                       // Mark typed characters as correct
+                       const charSpans = currentItem.element.querySelectorAll('.text-char');
+                       for (let i = 0; i < currentCharIndex; i++) {
+                           if (i < charSpans.length) {
+                               charSpans[i].classList.add('correct');
+                           }
                        }
                    }
                }
