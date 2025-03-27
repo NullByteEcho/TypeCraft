@@ -434,6 +434,77 @@
             opacity: 1;
         }
         
+        /* Learning Article Styles */
+        .learning-view {
+            display: none;
+            padding: 20px;
+            background-color: var(--light);
+        }
+        
+        .article-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+        }
+        
+        .article-page {
+            margin-bottom: 30px;
+        }
+        
+        .article-container h1 {
+            font-size: 2.2rem;
+            margin-bottom: 20px;
+            color: var(--primary-dark);
+            text-align: center;
+        }
+        
+        .article-container h2 {
+            font-size: 1.8rem;
+            margin: 35px 0 15px;
+            color: var(--primary-dark);
+            border-bottom: 2px solid rgba(99, 102, 241, 0.3);
+            padding-bottom: 8px;
+        }
+        
+        .article-container h3 {
+            font-size: 1.4rem;
+            margin: 25px 0 15px;
+            color: var(--dark);
+        }
+        
+        .article-container p {
+            margin-bottom: 20px;
+            line-height: 1.8;
+            font-size: 18px;
+        }
+        
+        .highlight-box {
+            background-color: rgba(99, 102, 241, 0.1);
+            border-left: 4px solid var(--primary);
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 0 var(--border-radius) var(--border-radius) 0;
+        }
+        
+        .article-container ul, .article-container ol {
+            margin-bottom: 20px;
+            padding-left: 25px;
+        }
+        
+        .article-container li {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        .article-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+        }
+        
         /* Responsive design */
         @media (max-width: 768px) {
             .document-container {
@@ -454,6 +525,10 @@
             }
             
             .document-text {
+                padding: 20px;
+            }
+            
+            .article-container {
                 padding: 20px;
             }
         }
@@ -487,6 +562,10 @@
                     <div id="savedSessionsContainer" style="display: none;">
                         <h3>Continue where you left off</h3>
                         <div id="savedSessionsList"></div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button class="btn" id="learnMoreBtn">Learn How TypeCraft Enhances Learning</button>
                     </div>
                 </div>
             </main>
@@ -529,6 +608,129 @@
                     </div>
                     <div class="typing-progress-item">
                         Progress: <span class="typing-progress-value" id="progressValue">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Learning Article View -->
+        <div id="learningView" class="learning-view">
+            <div class="nav-bar" style="margin-bottom: 20px;">
+                <div class="nav-title">
+                    <span>TypeCraft Learning Guide</span>
+                </div>
+                <div class="nav-controls">
+                    <button class="btn btn-secondary" id="backFromArticleBtn">Back to Main</button>
+                </div>
+            </div>
+            
+            <div class="article-container">
+                <div class="article-page">
+                    <h1>Learning Through Typing: How TypeCraft Enhances Knowledge Retention</h1>
+                    
+                    <h2>The Science Behind Active Learning</h2>
+                    <p>When we read passively, our brains often go into "cruise control" mode, which can limit how much information we truly absorb and retain. TypeCraft transforms this passive experience into an active one by engaging your motor skills alongside your cognitive processes. This multi-sensory approach creates stronger neural pathways and enhances memory formation.</p>
+                    
+                    <p>Research in cognitive psychology has consistently shown that active engagement with material leads to better learning outcomes than passive consumption. By physically typing each character of your study material, you:</p>
+                    <ul>
+                        <li>Slow down your reading pace to a more deliberate level</li>
+                        <li>Process information through multiple channels (visual, tactile, cognitive)</li>
+                        <li>Create additional memory cues through physical movement</li>
+                        <li>Force yourself to pay attention to every word, reducing mind-wandering</li>
+                    </ul>
+                    
+                    <h2>Effective Learning Strategies with TypeCraft</h2>
+                    
+                    <h3>1. The Focused First Pass</h3>
+                    <p>For your initial engagement with complex material, use TypeCraft to complete a "focused first pass." This technique involves typing through the material with full attention, deliberately slowing your consumption rate to match your typing speed. This enforced pacing helps prevent the common mistake of rushing through difficult concepts before they're fully understood.</p>
+                    
+                    <h3>2. Selective Emphasis</h3>
+                    <p>When reviewing material you've previously studied, use TypeCraft strategically:</p>
+                    <ul>
+                        <li>Type only the key paragraphs that contain core concepts</li>
+                        <li>Type definitions and critical formulas verbatim to reinforce precise terminology</li>
+                        <li>Skip sections you've already mastered to focus your typing energy on challenging areas</li>
+                    </ul>
+                    
+                    <h3>3. Synthesis and Note-Taking</h3>
+                    <p>After typing through source material, create a second document with your own synthesized notes:</p>
+                    <ul>
+                        <li>Summarize key concepts in your own words</li>
+                        <li>Create connections between different sections or topics</li>
+                        <li>Formulate questions about the material to explore later</li>
+                        <li>Type these personalized notes to further reinforce learning</li>
+                    </ul>
+                    
+                    <div class="highlight-box">
+                        <h4>Pro Tip: The Two-Phase Approach</h4>
+                        <p>For maximum retention, use a two-phase approach with TypeCraft: first type through the original material to ensure deep processing, then create and type your own summary notes to solidify understanding through reformulation.</p>
+                    </div>
+                </div>
+                
+                <div class="article-page">
+                    <h2>Cognitive Benefits of the TypeCraft Method</h2>
+                    
+                    <h3>Enhanced Focus and Attention</h3>
+                    <p>The act of typing creates a continuous feedback loop—your brain must maintain focus to accurately reproduce each character. Unlike passive reading where attention can drift unnoticed, typing immediately reveals lapses in concentration through errors, helping you develop stronger focus over time.</p>
+                    
+                    <h3>Improved Comprehension</h3>
+                    <p>When you type content, you engage with it at a deeper level than when simply reading. This deliberate processing improves understanding, especially for complex materials such as:</p>
+                    <ul>
+                        <li>Technical documentation</li>
+                        <li>Research papers</li>
+                        <li>Programming concepts</li>
+                        <li>Mathematical explanations</li>
+                        <li>Legal documents</li>
+                    </ul>
+                    
+                    <h3>Stronger Memory Formation</h3>
+                    <p>TypeCraft leverages the production effect—the phenomenon where information that is actively produced (by typing) is better remembered than information that is merely read. Each keystroke serves as a mini-commitment to the material, creating additional memory hooks.</p>
+                    
+                    <h2>Practical Applications</h2>
+                    
+                    <h3>Academic Learning</h3>
+                    <p>Students can use TypeCraft to:</p>
+                    <ul>
+                        <li>Type through lecture notes to reinforce classroom learning</li>
+                        <li>Process textbook chapters for better retention</li>
+                        <li>Prepare for exams by typing through summary materials</li>
+                        <li>Create study guides by typing key concepts</li>
+                    </ul>
+                    
+                    <h3>Professional Development</h3>
+                    <p>Professionals can leverage TypeCraft to:</p>
+                    <ul>
+                        <li>Learn new industry standards or regulations</li>
+                        <li>Master technical documentation</li>
+                        <li>Absorb business reports and analyses</li>
+                        <li>Internalize presentation materials</li>
+                    </ul>
+                    
+                    <h3>Language Learning</h3>
+                    <p>Language learners benefit from TypeCraft by:</p>
+                    <ul>
+                        <li>Reinforcing vocabulary through muscle memory</li>
+                        <li>Developing familiarity with grammar structures</li>
+                        <li>Practicing spelling in non-native languages</li>
+                        <li>Typing through example dialogues and phrases</li>
+                    </ul>
+                    
+                    <h2>Getting Started: A Simple Workflow</h2>
+                    <ol>
+                        <li><strong>Prepare your material</strong> - Upload a document containing information you want to learn</li>
+                        <li><strong>Set a realistic goal</strong> - Aim to type through a manageable section in each session</li>
+                        <li><strong>Type with intention</strong> - Focus on understanding, not just reproduction of text</li>
+                        <li><strong>Review your errors</strong> - Notice patterns in your mistakes that might indicate attention lapses</li>
+                        <li><strong>Create follow-up notes</strong> - After typing through source material, create your own summary document</li>
+                    </ol>
+                    
+                    <h2>Conclusion</h2>
+                    <p>TypeCraft transforms the fundamentally passive activity of reading into an active learning experience. By engaging your brain and body simultaneously, you create multiple pathways for information retention and deeper understanding. Whether you're a student tackling complex subjects, a professional mastering new skills, or a lifelong learner expanding your knowledge, the simple act of typing what you read can dramatically enhance how much you learn and retain.</p>
+                    
+                    <p>Start your TypeCraft journey today, and experience the difference that active, engaged learning can make in your educational and professional pursuits.</p>
+                    
+                    <div class="article-nav">
+                        <button class="btn" id="tryTypeBtn">Try TypeCraft Now</button>
                     </div>
                 </div>
             </div>
@@ -583,6 +785,12 @@
             const fileInput = document.getElementById('fileInput');
             const savedSessionsContainer = document.getElementById('savedSessionsContainer');
             const savedSessionsList = document.getElementById('savedSessionsList');
+            const learnMoreBtn = document.getElementById('learnMoreBtn');
+            
+            // DOM elements - Learning view
+            const learningView = document.getElementById('learningView');
+            const backFromArticleBtn = document.getElementById('backFromArticleBtn');
+            const tryTypeBtn = document.getElementById('tryTypeBtn');
             
             // DOM elements - Typing view
             const typingView = document.getElementById('typingView');
@@ -652,6 +860,22 @@
                     currentFileName = file.name;
                     processDocument(file);
                 }
+            });
+            
+            // Event listeners for learning article
+            learnMoreBtn.addEventListener('click', () => {
+                welcomeScreen.style.display = 'none';
+                learningView.style.display = 'block';
+            });
+            
+            backFromArticleBtn.addEventListener('click', () => {
+                learningView.style.display = 'none';
+                welcomeScreen.style.display = 'block';
+            });
+            
+            tryTypeBtn.addEventListener('click', () => {
+                learningView.style.display = 'none';
+                welcomeScreen.style.display = 'block';
             });
             
             // Drag and drop functionality
@@ -1071,8 +1295,7 @@
                    loadingIndicator.style.display = 'none';
                }
            }
-           
-           // Process a Word document using Mammoth.js with pagination
+// Process a Word document using Mammoth.js with pagination
            function processWordDocument(file) {
                const reader = new FileReader();
                
@@ -1492,8 +1715,7 @@
                const pageElements = documentPages[pageIndex].querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
                return startIndex + pageElements.length - 1;
            }
-           
-           // Extract typeable elements from a specific page
+            // Extract typeable elements from a specific page
            function extractTypeableElementsFromPage(pageContainer) {
                // Clear previous page typeable elements
                pageTypeableElements = [];
@@ -1965,8 +2187,7 @@
                localStorage.removeItem(`typecraft-session-${currentFileName}`);
                checkSavedSessions();
            }
-           
-           // Reset the typing session
+        // Reset the typing session
            function resetTypingSession() {
                // Reset state
                currentElementIndex = 0;
@@ -2236,6 +2457,120 @@
                // Update stats
                updateStats();
            }
+           
+           // Function to create a demo document with the learning article
+           function createLearningArticleDocument() {
+               // Create a text blob with the learning article content
+               const articleText = `# Learning Through Typing: How TypeCraft Enhances Knowledge Retention
+
+## The Science Behind Active Learning
+
+When we read passively, our brains often go into "cruise control" mode, which can limit how much information we truly absorb and retain. TypeCraft transforms this passive experience into an active one by engaging your motor skills alongside your cognitive processes. This multi-sensory approach creates stronger neural pathways and enhances memory formation.
+
+Research in cognitive psychology has consistently shown that active engagement with material leads to better learning outcomes than passive consumption. By physically typing each character of your study material, you:
+
+- Slow down your reading pace to a more deliberate level
+- Process information through multiple channels (visual, tactile, cognitive)
+- Create additional memory cues through physical movement
+- Force yourself to pay attention to every word, reducing mind-wandering
+
+## Effective Learning Strategies with TypeCraft
+
+### 1. The Focused First Pass
+
+For your initial engagement with complex material, use TypeCraft to complete a "focused first pass." This technique involves typing through the material with full attention, deliberately slowing your consumption rate to match your typing speed. This enforced pacing helps prevent the common mistake of rushing through difficult concepts before they're fully understood.
+
+### 2. Selective Emphasis
+
+When reviewing material you've previously studied, use TypeCraft strategically:
+- Type only the key paragraphs that contain core concepts
+- Type definitions and critical formulas verbatim to reinforce precise terminology
+- Skip sections you've already mastered to focus your typing energy on challenging areas
+
+### 3. Synthesis and Note-Taking
+
+After typing through source material, create a second document with your own synthesized notes:
+- Summarize key concepts in your own words
+- Create connections between different sections or topics
+- Formulate questions about the material to explore later
+- Type these personalized notes to further reinforce learning
+
+## Cognitive Benefits of the TypeCraft Method
+
+### Enhanced Focus and Attention
+
+The act of typing creates a continuous feedback loop—your brain must maintain focus to accurately reproduce each character. Unlike passive reading where attention can drift unnoticed, typing immediately reveals lapses in concentration through errors, helping you develop stronger focus over time.
+
+### Improved Comprehension
+
+When you type content, you engage with it at a deeper level than when simply reading. This deliberate processing improves understanding, especially for complex materials such as:
+- Technical documentation
+- Research papers
+- Programming concepts
+- Mathematical explanations
+- Legal documents
+
+### Stronger Memory Formation
+
+TypeCraft leverages the production effect—the phenomenon where information that is actively produced (by typing) is better remembered than information that is merely read. Each keystroke serves as a mini-commitment to the material, creating additional memory hooks.
+
+## Practical Applications
+
+### Academic Learning
+
+Students can use TypeCraft to:
+- Type through lecture notes to reinforce classroom learning
+- Process textbook chapters for better retention
+- Prepare for exams by typing through summary materials
+- Create study guides by typing key concepts
+
+### Professional Development
+
+Professionals can leverage TypeCraft to:
+- Learn new industry standards or regulations
+- Master technical documentation
+- Absorb business reports and analyses
+- Internalize presentation materials
+
+### Language Learning
+
+Language learners benefit from TypeCraft by:
+- Reinforcing vocabulary through muscle memory
+- Developing familiarity with grammar structures
+- Practicing spelling in non-native languages
+- Typing through example dialogues and phrases
+
+## Getting Started: A Simple Workflow
+
+1. Prepare your material - Upload a document containing information you want to learn
+2. Set a realistic goal - Aim to type through a manageable section in each session
+3. Type with intention - Focus on understanding, not just reproduction of text
+4. Review your errors - Notice patterns in your mistakes that might indicate attention lapses
+5. Create follow-up notes - After typing through source material, create your own summary document
+
+## Conclusion
+
+TypeCraft transforms the fundamentally passive activity of reading into an active learning experience. By engaging your brain and body simultaneously, you create multiple pathways for information retention and deeper understanding. Whether you're a student tackling complex subjects, a professional mastering new skills, or a lifelong learner expanding your knowledge, the simple act of typing what you read can dramatically enhance how much you learn and retain.
+
+Start your TypeCraft journey today, and experience the difference that active, engaged learning can make in your educational and professional pursuits.`;
+
+               // Create a blob from the text
+               const blob = new Blob([articleText], { type: 'text/markdown' });
+               
+               // Create a file object
+               const file = new File([blob], "TypeCraft_Learning_Guide.md", { type: 'text/markdown' });
+               
+               // Process the file
+               currentFile = file;
+               currentFileName = file.name;
+               processMarkdownDocument(file);
+           }
+           
+           // Add event listener for the demo button
+           tryTypeBtn.addEventListener('click', () => {
+               createLearningArticleDocument();
+               learningView.style.display = 'none';
+           });
        });
    </script>
 </body>
